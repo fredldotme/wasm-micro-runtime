@@ -180,7 +180,7 @@ process_packet(WASMGDBServer *server)
 
     payload = (char *)&inbuf[1];
 
-    LOG_VERBOSE("receive request:%c %s\n", request, payload);
+    LOG_ERROR("receive request:%c %s\n", request, payload);
     handle_packet(server, request, payload);
 }
 

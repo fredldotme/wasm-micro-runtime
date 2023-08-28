@@ -934,20 +934,26 @@ wasm_debug_instance_add_breakpoint(WASMDebugInstance *instance, uint64 addr,
     WASMModuleInstance *module_inst;
     uint64 offset;
 
-    if (!instance)
+    if (!instance) {
+        LOG_ERROR("No instance\n");
         return false;
+    }
 
     exec_env = bh_list_first_elem(&instance->cluster->exec_env_list);
-    if (!exec_env)
+    if (!exec_env) {
+        LOG_ERROR("No exec_env\n");
         return false;
+    }
 
     module_inst = (WASMModuleInstance *)exec_env->module_inst;
-    if (WASM_ADDR_TYPE(addr) != WasmObj)
+    if (WASM_ADDR_TYPE(addr) != WasmObj && WASM_ADDR_TYPE(addr) != WasmMemory) {
+        LOG_ERROR("WASM_ADDR_TYPE is %d\n", WASM_ADDR_TYPE(addr));
         return false;
+    }
 
     offset = WASM_ADDR_OFFSET(addr);
 
-    if (length >= sizeof(break_instr)) {
+    if (true /*length >= sizeof(break_instr)*/) {
         if (offset + sizeof(break_instr) <= module_inst->module->load_size) {
             WASMDebugBreakPoint *breakpoint;
             if (!(breakpoint =
@@ -971,6 +977,8 @@ wasm_debug_instance_add_breakpoint(WASMDebugInstance *instance, uint64 addr,
             return true;
         }
     }
+
+    LOG_ERROR("No breakpoint set\n");
     return false;
 }
 

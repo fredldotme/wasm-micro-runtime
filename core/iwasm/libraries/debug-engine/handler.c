@@ -709,7 +709,7 @@ handle_add_break(WASMGDBServer *server, char *payload)
     size_t type, length;
     uint64 addr;
 
-    if ((arg_c = sscanf(payload, "%zx,%" SCNx64 ",%zx", &type, &addr, &length))
+    if ((arg_c = sscanf(payload, "%zx,%x,%zx", &type, &addr, &length))
         != 3) {
         LOG_ERROR("Unsupported number of add break arguments %d", arg_c);
         write_packet(server, "");

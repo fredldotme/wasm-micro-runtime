@@ -37,6 +37,15 @@ on_thread_stop_event(WASMDebugInstance *debug_inst, WASMExecEnv *exec_env)
 }
 
 void
+on_thread_continue_event(WASMDebugInstance *debug_inst, WASMExecEnv *exec_env)
+{
+    os_mutex_lock(&debug_inst->wait_lock);
+    debug_inst->stopped_thread = NULL;
+    os_cond_signal(&debug_inst->wait_cond);
+    os_mutex_unlock(&debug_inst->wait_lock);
+}
+
+void
 on_thread_exit_event(WASMDebugInstance *debug_inst, WASMExecEnv *exec_env)
 {
     os_mutex_lock(&debug_inst->wait_lock);
@@ -1438,4 +1447,13 @@ wasm_debug_instance_ummap(WASMDebugInstance *instance, uint64 addr)
     /* Currently we don't support to free the execution memory, simply return
      * true here */
     return true;
+}
+
+
+void
+wasm_debug_engine_wait_for_continue()
+{
+    while (global_debug_op_break) {
+        usleep (1000 * 100);
+    }
 }

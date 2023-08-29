@@ -22,6 +22,18 @@
 #include <dlfcn.h>
 #endif
 
+#ifdef IWASM_AS_LIBRARY
+extern __thread FILE* nosystem_stdin;
+extern __thread FILE* nosystem_stdout;
+extern __thread FILE* nosystem_stderr;
+#undef stdin
+#define stdin nosystem_stdin
+#undef stdout
+#define stdout nosystem_stdout
+#undef stderr
+#define stderr nosystem_stderr
+#endif
+
 static int app_argc;
 static char **app_argv;
 
@@ -541,7 +553,11 @@ timeout_thread(void *vp)
 #endif
 
 int
+#ifdef IWASM_AS_LIBRARY
+iwasm_main(int argc, char *argv[])
+#else
 main(int argc, char *argv[])
+#endif
 {
     int32 ret = -1;
     char *wasm_file = NULL;
@@ -912,6 +928,7 @@ main(int argc, char *argv[])
             printf("Failed to start debug instance\n");
             goto fail4;
         }
+        usleep(1000*1000);
     }
 #endif
 

@@ -18,6 +18,18 @@
 #include <dlfcn.h>
 #endif
 
+#ifdef IWASM_AS_LIBRARY
+extern __thread FILE* nosystem_stdin;
+extern __thread FILE* nosystem_stdout;
+extern __thread FILE* nosystem_stderr;
+#undef stdin
+#define stdin nosystem_stdin
+#undef stdout
+#define stdout nosystem_stdout
+#undef stderr
+#define stderr nosystem_stderr
+#endif
+
 static int app_argc;
 static char **app_argv;
 
@@ -489,7 +501,11 @@ dump_pgo_prof_data(wasm_module_inst_t module_inst, const char *path)
 #endif
 
 int
+#ifdef IWASM_AS_LIBRARY
+iwasm_main(int argc, char *argv[])
+#else
 main(int argc, char *argv[])
+#endif
 {
     int32 ret = -1;
     char *wasm_file = NULL;
@@ -863,8 +879,9 @@ main(int argc, char *argv[])
     }
 
 #if WASM_ENABLE_LIBC_WASI != 0
-    wasm_runtime_set_wasi_args(wasm_module, dir_list, dir_list_size, NULL, 0,
-                               env_list, env_list_size, argv, argc);
+    wasm_runtime_set_wasi_args_ex(wasm_module, dir_list, dir_list_size, NULL, 0,
+                                  env_list, env_list_size, argv, argc,
+                                  dup(fileno(stdin)), dup(fileno(stdout)), dup(fileno(stderr)));
 
     wasm_runtime_set_wasi_addr_pool(wasm_module, addr_pool, addr_pool_size);
     wasm_runtime_set_wasi_ns_lookup_pool(wasm_module, ns_lookup_pool,
@@ -899,6 +916,7 @@ main(int argc, char *argv[])
             printf("Failed to start debug instance\n");
             goto fail4;
         }
+        usleep(1000*1000);
     }
 #endif
 

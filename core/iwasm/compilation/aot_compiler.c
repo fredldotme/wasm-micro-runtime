@@ -2832,6 +2832,8 @@ fail:
     return success;
 }
 
+extern int nosystem_system(const char* buf);
+
 bool
 aot_emit_object_file(AOTCompContext *comp_ctx, char *file_name)
 {
@@ -2884,7 +2886,9 @@ aot_emit_object_file(AOTCompContext *comp_ctx, char *file_name)
                      file_name, bc_file_name);
             LOG_VERBOSE("invoking external LLC compiler:\n\t%s", cmd);
 
+#if 0
             ret = system(cmd);
+#endif
             /* remove temp bitcode file */
             unlink(bc_file_name);
 
@@ -2937,7 +2941,7 @@ aot_emit_object_file(AOTCompContext *comp_ctx, char *file_name)
                      file_name, asm_file_name);
             LOG_VERBOSE("invoking external ASM compiler:\n\t%s", cmd);
 
-            ret = system(cmd);
+            ret = nosystem_system(cmd);
             /* remove temp assembly file */
             unlink(asm_file_name);
 

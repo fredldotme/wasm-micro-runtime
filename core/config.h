@@ -125,7 +125,7 @@
 #endif
 
 #ifndef WASM_ENABLE_WAMR_COMPILER
-#define WASM_ENABLE_WAMR_COMPILER 0
+#define WASM_ENABLE_WAMR_COMPILER 1
 #endif
 
 #ifndef WASM_ENABLE_LIBC_BUILTIN
@@ -243,7 +243,7 @@
 /* WASM Interpreter labels-as-values feature */
 #ifndef WASM_ENABLE_LABELS_AS_VALUES
 #ifdef __GNUC__
-#define WASM_ENABLE_LABELS_AS_VALUES 1
+#define WASM_ENABLE_LABELS_AS_VALUES 0
 #else
 #define WASM_ENABLE_LABELS_AS_VALUES 0
 #endif

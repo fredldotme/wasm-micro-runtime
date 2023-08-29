@@ -3508,7 +3508,9 @@ aot_obj_data_create(AOTCompContext *comp_ctx)
                  "/opt/zephyr-sdk/arc-zephyr-elf/bin/arc-zephyr-elf-gcc ",
                  "-mcpu=arcem -o ", file_name, ".o -c ", file_name, ".s");
         /* TODO: use try..catch to handle possible exceptions */
+#if 0
         ret = system(buf);
+#endif
         /* remove temp assembly file */
         snprintf(buf, sizeof(buf), "%s%s", file_name, ".s");
         unlink(buf);

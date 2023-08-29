@@ -243,7 +243,7 @@
 /* WASM Interpreter labels-as-values feature */
 #ifndef WASM_ENABLE_LABELS_AS_VALUES
 #ifdef __GNUC__
-#define WASM_ENABLE_LABELS_AS_VALUES 0
+#define WASM_ENABLE_LABELS_AS_VALUES 1
 #else
 #define WASM_ENABLE_LABELS_AS_VALUES 0
 #endif

@@ -257,5 +257,5 @@ wasm_debug_instance_ummap(WASMDebugInstance *instance, uint64 addr);
 static bool global_debug_op_break = false;
 
 void
-wasm_debug_engine_wait_for_continue();
+wasm_debug_engine_wait_for_continue(WASMExecEnv* exec_env);
 #endif

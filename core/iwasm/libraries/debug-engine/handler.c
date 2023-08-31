@@ -751,16 +751,16 @@ handle_add_break(WASMGDBServer *server, char *payload)
 void
 handle_remove_break(WASMGDBServer *server, char *payload)
 {
-    int arg_c;
     size_t type, length;
     uint64 addr;
 
-    if ((arg_c = sscanf(payload, "%zx,%x,%zx", &type, &addr, &length))
-        != 3) {
-        LOG_ERROR("Unsupported number of remove break arguments %d", arg_c);
-        write_packet(server, "");
-        return;
-    }
+    char* buf = strdup(payload);
+    char* type_str = strtok(buf, ",");
+    char* addr_str = strtok(NULL, ",");
+    char* length_str = strtok(NULL, ",");
+    type = strtol(type_str, NULL, 16);
+    addr = strtoull(addr_str, NULL, 16);
+    length = strtol(length_str, NULL, 16);
 
     switch (type) {
         case eBreakpointSoftware:

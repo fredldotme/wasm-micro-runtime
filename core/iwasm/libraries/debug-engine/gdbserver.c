@@ -139,6 +139,12 @@ wasm_gdbserver_detach(WASMGDBServer *server)
         os_socket_shutdown(server->socket_fd);
         os_socket_close(server->socket_fd);
     }
+
+    // Necessary for desired Tide behavior
+    if (server->listen_fd > 0) {
+        os_socket_shutdown(server->listen_fd);
+        os_socket_close(server->listen_fd);
+    }
 }
 
 void

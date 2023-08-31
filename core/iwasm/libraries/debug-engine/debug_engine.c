@@ -1109,14 +1109,18 @@ wasm_debug_instance_on_failure(WASMDebugInstance *instance)
         return false;
     }
 
+#if 0
     if (instance->stopped_thread == NULL
         && instance->current_state == DBG_LAUNCHING) {
         /* if fail in start stage: may need wait for main thread to notify it */
         os_cond_wait(&instance->wait_cond, &instance->wait_lock);
     }
+#endif
+
     instance->current_state = DBG_ERROR;
     instance->stopped_thread = NULL;
 
+#if 0
     /* terminate the wasm execution thread */
     while (exec_env) {
         /* Resume all threads so they can receive the TERM signal */
@@ -1127,8 +1131,9 @@ wasm_debug_instance_on_failure(WASMDebugInstance *instance)
         os_mutex_unlock(&exec_env->wait_lock);
         exec_env = bh_list_elem_next(exec_env);
     }
-    os_mutex_unlock(&instance->wait_lock);
+#endif
 
+    os_mutex_unlock(&instance->wait_lock);
     return true;
 }
 
@@ -1186,11 +1191,13 @@ wasm_debug_instance_detach(WASMDebugInstance *instance)
     if (!instance)
         return false;
 
+    wasm_gdbserver_detach(instance->control_thread->server);
+
+#if 0
     exec_env = bh_list_first_elem(&instance->cluster->exec_env_list);
     if (!exec_env)
         return false;
 
-    wasm_gdbserver_detach(instance->control_thread->server);
 
     while (exec_env) {
         if (instance->current_state == APP_STOPPED) {
@@ -1199,6 +1206,7 @@ wasm_debug_instance_detach(WASMDebugInstance *instance)
         }
         exec_env = bh_list_elem_next(exec_env);
     }
+#endif
 
     /* relaunch, accept new debug connection */
     instance->current_state = DBG_LAUNCHING;
@@ -1206,6 +1214,12 @@ wasm_debug_instance_detach(WASMDebugInstance *instance)
     instance->stopped_thread = NULL;
 
     return true;
+}
+
+void
+wasm_debug_instance_wait_for_attach(WASMDebugInstance *instance)
+{
+    
 }
 
 bool
@@ -1449,11 +1463,12 @@ wasm_debug_instance_ummap(WASMDebugInstance *instance, uint64 addr)
     return true;
 }
 
-
 void
-wasm_debug_engine_wait_for_continue()
+wasm_debug_engine_wait_for_continue(WASMExecEnv* exec_env)
 {
-    while (global_debug_op_break) {
-        usleep (1000 * 100);
+    WASMCluster *cluster = wasm_exec_env_get_cluster(exec_env);
+    while (cluster->debug_inst == NULL ||
+           !is_thread_running(cluster->debug_inst->control_thread)) {
+        usleep(1000 * 100);
     }
 }

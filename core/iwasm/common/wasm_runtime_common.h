@@ -643,6 +643,9 @@ wasm_runtime_start_debug_instance_with_port(WASMExecEnv *exec_env,
 /* See wasm_export.h for description */
 WASM_RUNTIME_API_EXTERN uint32
 wasm_runtime_start_debug_instance(WASMExecEnv *exec_env);
+
+WASM_RUNTIME_API_EXTERN void
+wasm_runtime_wait_for_remote_start(WASMExecEnv *exec_env);
 #endif
 
 bool

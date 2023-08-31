@@ -808,6 +808,12 @@ wasm_runtime_start_debug_instance(WASMExecEnv *exec_env)
 {
     return wasm_runtime_start_debug_instance_with_port(exec_env, -1);
 }
+
+void
+wasm_runtime_wait_for_remote_start(WASMExecEnv *exec_env)
+{
+    wasm_debug_engine_wait_for_continue(exec_env);
+}
 #endif
 
 #if WASM_ENABLE_MULTI_MODULE != 0

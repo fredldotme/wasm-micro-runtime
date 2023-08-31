@@ -683,6 +683,9 @@ wasm_runtime_start_debug_instance_with_port(wasm_exec_env_t exec_env, int32_t po
 WASM_RUNTIME_API_EXTERN uint32_t
 wasm_runtime_start_debug_instance(wasm_exec_env_t exec_env);
 
+WASM_RUNTIME_API_EXTERN void
+wasm_runtime_wait_for_remote_start(wasm_exec_env_t exec_env);
+
 /**
  * Initialize the thread environment.
  * Note:

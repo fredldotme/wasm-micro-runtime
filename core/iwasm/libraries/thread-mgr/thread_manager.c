@@ -390,6 +390,7 @@ wasm_cluster_del_exec_env_internal(WASMCluster *cluster, WASMExecEnv *exec_env,
     bh_assert(exec_env->cluster == cluster);
 
 #if WASM_ENABLE_DEBUG_INTERP != 0
+#if 0
     /* Wait for debugger control thread to process the
        stop event of this thread */
     if (cluster->debug_inst) {
@@ -403,6 +404,13 @@ wasm_cluster_del_exec_env_internal(WASMCluster *cluster, WASMExecEnv *exec_env,
         }
         os_mutex_unlock(&cluster->debug_inst->wait_lock);
     }
+
+#else
+    if (cluster->debug_inst) {
+        wasm_debug_instance_detach(cluster->debug_inst);
+    }
+#endif
+
 #endif
     if (bh_list_remove(&cluster->exec_env_list, exec_env) != 0)
         ret = false;
@@ -509,7 +517,7 @@ wasm_cluster_spawn_exec_env(WASMExecEnv *exec_env)
 #endif
 
     if (!(new_module_inst = wasm_runtime_instantiate_internal(
-              module, true, exec_env, stack_size, 0, NULL, 0))) {
+              module, module_inst, exec_env, stack_size, 0, NULL, 0))) {
         goto fail1;
     }
 
@@ -606,7 +614,8 @@ thread_manager_start_routine(void *arg)
 
 #ifdef OS_ENABLE_HW_BOUND_CHECK
     os_mutex_lock(&exec_env->wait_lock);
-    if (exec_env->suspend_flags.flags & 0x08)
+    if (WASM_SUSPEND_FLAGS_GET(exec_env->suspend_flags)
+        & WASM_SUSPEND_FLAG_EXIT)
         ret = exec_env->thread_ret_value;
     os_mutex_unlock(&exec_env->wait_lock);
 #endif
@@ -745,10 +754,10 @@ wasm_cluster_dup_c_api_imports(WASMModuleInstanceCommon *module_inst_dst,
 
 #if WASM_ENABLE_INTERP != 0
     if (module_inst_src->module_type == Wasm_Module_Bytecode) {
-        new_c_api_func_imports =
-            &(((WASMModuleInstance *)module_inst_dst)->e->c_api_func_imports);
+        new_c_api_func_imports = &(((WASMModuleInstance *)module_inst_dst)
+                                       ->e->common.c_api_func_imports);
         c_api_func_imports = ((const WASMModuleInstance *)module_inst_src)
-                                 ->e->c_api_func_imports;
+                                 ->e->common.c_api_func_imports;
         import_func_count =
             ((WASMModule *)(((const WASMModuleInstance *)module_inst_src)
                                 ->module))
@@ -759,10 +768,10 @@ wasm_cluster_dup_c_api_imports(WASMModuleInstanceCommon *module_inst_dst,
     if (module_inst_src->module_type == Wasm_Module_AoT) {
         AOTModuleInstanceExtra *e =
             (AOTModuleInstanceExtra *)((AOTModuleInstance *)module_inst_dst)->e;
-        new_c_api_func_imports = &(e->c_api_func_imports);
+        new_c_api_func_imports = &(e->common.c_api_func_imports);
 
         e = (AOTModuleInstanceExtra *)((AOTModuleInstance *)module_inst_src)->e;
-        c_api_func_imports = e->c_api_func_imports;
+        c_api_func_imports = e->common.c_api_func_imports;
 
         import_func_count =
             ((AOTModule *)(((AOTModuleInstance *)module_inst_src)->module))
@@ -887,6 +896,7 @@ wasm_cluster_thread_continue(WASMExecEnv *exec_env)
     os_mutex_lock(&exec_env->wait_lock);
     wasm_cluster_clear_thread_signal(exec_env);
     exec_env->current_status->running_status = STATUS_RUNNING;
+    global_debug_op_break = false;
     os_cond_signal(&exec_env->wait_cond);
     os_mutex_unlock(&exec_env->wait_lock);
 }
@@ -993,7 +1003,9 @@ wasm_cluster_exit_thread(WASMExecEnv *exec_env, void *retval)
     if (exec_env->jmpbuf_stack_top) {
         /* Store the return value in exec_env */
         exec_env->thread_ret_value = retval;
-        exec_env->suspend_flags.flags |= 0x08;
+
+        WASM_SUSPEND_FLAGS_FETCH_OR(exec_env->suspend_flags,
+                                    WASM_SUSPEND_FLAG_EXIT);
 
 #ifndef BH_PLATFORM_WINDOWS
         /* Pop all jmpbuf_node except the last one */
@@ -1055,7 +1067,8 @@ set_thread_cancel_flags(WASMExecEnv *exec_env)
 #if WASM_ENABLE_DEBUG_INTERP != 0
     wasm_cluster_thread_send_signal(exec_env, WAMR_SIG_TERM);
 #endif
-    exec_env->suspend_flags.flags |= 0x01;
+    WASM_SUSPEND_FLAGS_FETCH_OR(exec_env->suspend_flags,
+                                WASM_SUSPEND_FLAG_TERMINATE);
 
     os_mutex_unlock(&exec_env->wait_lock);
 }
@@ -1178,7 +1191,8 @@ void
 wasm_cluster_suspend_thread(WASMExecEnv *exec_env)
 {
     /* Set the suspend flag */
-    exec_env->suspend_flags.flags |= 0x02;
+    WASM_SUSPEND_FLAGS_FETCH_OR(exec_env->suspend_flags,
+                                WASM_SUSPEND_FLAG_SUSPEND);
 }
 
 static void
@@ -1214,7 +1228,8 @@ wasm_cluster_suspend_all_except_self(WASMCluster *cluster,
 void
 wasm_cluster_resume_thread(WASMExecEnv *exec_env)
 {
-    exec_env->suspend_flags.flags &= ~0x02;
+    WASM_SUSPEND_FLAGS_FETCH_AND(exec_env->suspend_flags,
+                                 ~WASM_SUSPEND_FLAG_SUSPEND);
     os_cond_signal(&exec_env->wait_cond);
 }
 
@@ -1248,10 +1263,8 @@ set_exception_visitor(void *node, void *user_data)
 
         /* Only spread non "wasi proc exit" exception */
 #if WASM_ENABLE_SHARED_MEMORY != 0
-        WASMSharedMemNode *shared_mem_node = wasm_module_get_shared_memory(
-            (WASMModuleCommon *)curr_wasm_inst->module);
-        if (shared_mem_node)
-            os_mutex_lock(&shared_mem_node->shared_mem_lock);
+        if (curr_wasm_inst->memory_count > 0)
+            shared_memory_lock(curr_wasm_inst->memories[0]);
 #endif
         if (!strstr(wasm_inst->cur_exception, "wasi proc exit")) {
             bh_memcpy_s(curr_wasm_inst->cur_exception,
@@ -1260,8 +1273,8 @@ set_exception_visitor(void *node, void *user_data)
                         sizeof(wasm_inst->cur_exception));
         }
 #if WASM_ENABLE_SHARED_MEMORY != 0
-        if (shared_mem_node)
-            os_mutex_unlock(&shared_mem_node->shared_mem_lock);
+        if (curr_wasm_inst->memory_count > 0)
+            shared_memory_unlock(curr_wasm_inst->memories[0]);
 #endif
 
         /* Terminate the thread so it can exit from dead loops */
@@ -1280,15 +1293,13 @@ clear_exception_visitor(void *node, void *user_data)
             (WASMModuleInstance *)get_module_inst(curr_exec_env);
 
 #if WASM_ENABLE_SHARED_MEMORY != 0
-        WASMSharedMemNode *shared_mem_node = wasm_module_get_shared_memory(
-            (WASMModuleCommon *)curr_wasm_inst->module);
-        if (shared_mem_node)
-            os_mutex_lock(&shared_mem_node->shared_mem_lock);
+        if (curr_wasm_inst->memory_count > 0)
+            shared_memory_lock(curr_wasm_inst->memories[0]);
 #endif
         curr_wasm_inst->cur_exception[0] = '\0';
 #if WASM_ENABLE_SHARED_MEMORY != 0
-        if (shared_mem_node)
-            os_mutex_unlock(&shared_mem_node->shared_mem_lock);
+        if (curr_wasm_inst->memory_count > 0)
+            shared_memory_unlock(curr_wasm_inst->memories[0]);
 #endif
     }
 }
@@ -1343,8 +1354,10 @@ bool
 wasm_cluster_is_thread_terminated(WASMExecEnv *exec_env)
 {
     os_mutex_lock(&exec_env->wait_lock);
-    bool is_thread_terminated =
-        (exec_env->suspend_flags.flags & 0x01) ? true : false;
+    bool is_thread_terminated = (WASM_SUSPEND_FLAGS_GET(exec_env->suspend_flags)
+                                 & WASM_SUSPEND_FLAG_TERMINATE)
+                                    ? true
+                                    : false;
     os_mutex_unlock(&exec_env->wait_lock);
 
     return is_thread_terminated;

@@ -287,7 +287,7 @@ handle_general_query(WASMGDBServer *server, char *payload)
     }
 
     if (args && (!strcmp(name, "MemoryRegionInfo"))) {
-        uint64 addr = strtoll(args, NULL, 16);
+        uint64 addr = strtoul(args, NULL, 16);
         WASMDebugMemoryInfo *mem_info = wasm_debug_instance_get_memregion(
             (WASMDebugInstance *)server->thread->debug_instance, addr);
         if (mem_info) {
@@ -591,11 +591,19 @@ void
 handle_get_read_memory(WASMGDBServer *server, char *payload)
 {
     uint64 maddr, mlen;
+    char* maddr_str;
+    char* mlen_str;
     bool ret;
 
+    char* copy = strdup(payload);
+    maddr_str = strtok(copy, ",");
+    mlen_str = strtok(NULL, ",");
+    maddr = strtoul(maddr_str, NULL, 16);
+    mlen = strtoul(mlen_str, NULL, 16);
+    free(copy);
+
     os_mutex_lock(&tmpbuf_lock);
-    snprintf(tmpbuf, MAX_PACKET_SIZE, "%s", "");
-    if (sscanf(payload, "%" SCNx64 ",%" SCNx64, &maddr, &mlen) == 2) {
+    if (true) {
         char *buff;
 
         if (mlen * 2 > MAX_PACKET_SIZE) {
@@ -612,6 +620,8 @@ handle_get_read_memory(WASMGDBServer *server, char *payload)
                 mem2hex(buff, tmpbuf, mlen);
             }
             wasm_runtime_free(buff);
+        } else {
+            LOG_ERROR("Failed to allocate memory");
         }
     }
     write_packet(server, tmpbuf);
@@ -705,16 +715,17 @@ handle_watchpoint_read_remove(WASMGDBServer *server, uint64 addr, size_t length)
 void
 handle_add_break(WASMGDBServer *server, char *payload)
 {
-    int arg_c;
     size_t type, length;
     uint64 addr;
 
-    if ((arg_c = sscanf(payload, "%zx,%" SCNx64 ",%zx", &type, &addr, &length))
-        != 3) {
-        LOG_ERROR("Unsupported number of add break arguments %d", arg_c);
-        write_packet(server, "");
-        return;
-    }
+    char* buf = strdup(payload);
+    char* type_str = strtok(buf, ",");
+    char* addr_str = strtok(NULL, ",");
+    char* length_str = strtok(NULL, ",");
+    type = strtol(type_str, NULL, 16);
+    addr = strtoull(addr_str, NULL, 16);
+    length = strtol(length_str, NULL, 16);
+    free(buf);
 
     switch (type) {
         case eBreakpointSoftware:
@@ -740,16 +751,16 @@ handle_add_break(WASMGDBServer *server, char *payload)
 void
 handle_remove_break(WASMGDBServer *server, char *payload)
 {
-    int arg_c;
     size_t type, length;
     uint64 addr;
 
-    if ((arg_c = sscanf(payload, "%zx,%" SCNx64 ",%zx", &type, &addr, &length))
-        != 3) {
-        LOG_ERROR("Unsupported number of remove break arguments %d", arg_c);
-        write_packet(server, "");
-        return;
-    }
+    char* buf = strdup(payload);
+    char* type_str = strtok(buf, ",");
+    char* addr_str = strtok(NULL, ",");
+    char* length_str = strtok(NULL, ",");
+    type = strtol(type_str, NULL, 16);
+    addr = strtoull(addr_str, NULL, 16);
+    length = strtol(length_str, NULL, 16);
 
     switch (type) {
         case eBreakpointSoftware:

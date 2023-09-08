@@ -118,6 +118,9 @@ void
 on_thread_stop_event(WASMDebugInstance *debug_inst, WASMExecEnv *exec_env);
 
 void
+on_thread_continue_event(WASMDebugInstance *debug_inst, WASMExecEnv *exec_env);
+
+void
 on_thread_exit_event(WASMDebugInstance *debug_inst, WASMExecEnv *exec_env);
 
 WASMDebugInstance *
@@ -250,4 +253,9 @@ wasm_debug_instance_mmap(WASMDebugInstance *instance, uint32 size,
 
 bool
 wasm_debug_instance_ummap(WASMDebugInstance *instance, uint64 addr);
+
+static bool global_debug_op_break = false;
+
+void
+wasm_debug_engine_wait_for_continue(WASMExecEnv* exec_env);
 #endif

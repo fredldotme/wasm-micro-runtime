@@ -3684,6 +3684,7 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
         HANDLE_OP(WASM_OP_REF_FUNC)
 #endif
 #if WASM_ENABLE_EXCE_HANDLING == 0
+        /* if exception handling is disabled, these opcodes issue a trap */
         HANDLE_OP(WASM_OP_TRY)
         HANDLE_OP(WASM_OP_CATCH)
         HANDLE_OP(WASM_OP_THROW)

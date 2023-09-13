@@ -678,6 +678,10 @@ wasm_runtime_get_exception(WASMModuleInstanceCommon *module);
 WASM_RUNTIME_API_EXTERN void
 wasm_runtime_clear_exception(WASMModuleInstanceCommon *module_inst);
 
+/* See wasm_export.h for description */
+WASM_RUNTIME_API_EXTERN void
+wasm_runtime_terminate(WASMModuleInstanceCommon *module);
+
 /* Internal API */
 void
 wasm_runtime_set_custom_data_internal(WASMModuleInstanceCommon *module_inst,
@@ -941,6 +945,26 @@ wasm_runtime_register_natives_raw(const char *module_name,
 WASM_RUNTIME_API_EXTERN bool
 wasm_runtime_unregister_natives(const char *module_name,
                                 NativeSymbol *native_symbols);
+
+/* See wasm_export.h for description */
+WASM_RUNTIME_API_EXTERN void *
+wasm_runtime_create_context_key(void (*dtor)(WASMModuleInstanceCommon *inst,
+                                             void *ctx));
+
+/* See wasm_export.h for description */
+WASM_RUNTIME_API_EXTERN void
+wasm_runtime_destroy_context_key(void *key);
+
+/* See wasm_export.h for description */
+WASM_RUNTIME_API_EXTERN void
+wasm_runtime_set_context(WASMModuleInstanceCommon *inst, void *key, void *ctx);
+/* See wasm_export.h for description */
+WASM_RUNTIME_API_EXTERN void
+wasm_runtime_set_context_spread(WASMModuleInstanceCommon *inst, void *key,
+                                void *ctx);
+/* See wasm_export.h for description */
+WASM_RUNTIME_API_EXTERN void *
+wasm_runtime_get_context(WASMModuleInstanceCommon *inst, void *key);
 
 bool
 wasm_runtime_invoke_native(WASMExecEnv *exec_env, void *func_ptr,

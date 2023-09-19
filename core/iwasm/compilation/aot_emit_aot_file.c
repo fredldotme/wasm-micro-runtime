@@ -2316,6 +2316,7 @@ aot_resolve_target_info(AOTCompContext *comp_ctx, AOTObjectData *obj_data)
         SET_TARGET_INFO(e_version, e_version, uint32, is_little_bin);
         SET_TARGET_INFO(e_flags, e_flags, uint32, is_little_bin);
     }
+#if 0
     else if (bin_type == LLVMBinaryTypeMachO32L
              || bin_type == LLVMBinaryTypeMachO32B) {
         /* TODO: parse file type of Mach-O 32 */
@@ -2328,6 +2329,7 @@ aot_resolve_target_info(AOTCompContext *comp_ctx, AOTObjectData *obj_data)
         aot_set_last_error("invaid llvm binary bin_type.");
         return false;
     }
+#endif
 
     bh_assert(sizeof(obj_data->target_info.arch)
               == sizeof(comp_ctx->target_arch));

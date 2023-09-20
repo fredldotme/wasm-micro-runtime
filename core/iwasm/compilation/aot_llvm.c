@@ -2640,9 +2640,6 @@ aot_create_comp_context(const AOTCompData *comp_data, aot_comp_option_t option)
         if (!features)
             features = "";
 
-        // Tide hack
-        triple_norm = "arm64-apple-darwin22.5.0";
-
         /* Get target with triple, note that LLVMGetTargetFromTriple()
            return 0 when success, but not true. */
         if (LLVMGetTargetFromTriple(triple_norm, &target, &err) != 0) {

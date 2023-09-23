@@ -597,7 +597,7 @@ function wasi_certification_test()
 
     cd ${WORK_DIR}
     if [ ! -d "wasi-testsuite" ]; then
-        echo "wasi not exist, clone it from github"
+        echo "wasi-testsuite not exist, clone it from github"
         git clone -b prod/testsuite-all \
             --single-branch https://github.com/WebAssembly/wasi-testsuite.git
     fi

@@ -1558,12 +1558,15 @@ wasm_runtime_get_context(wasm_module_inst_t inst, void *key);
  *
  * eg.
  *
- *   if (!wasm_runtime_begin_blocking_op) {
+ *   if (!wasm_runtime_begin_blocking_op(exec_env)) {
  *       return EINTR;
  *   }
  *   ret = possibly_blocking_op();
- *   wasm_runtime_end_blocking_op(env);
+ *   wasm_runtime_end_blocking_op(exec_env);
  *   return ret;
+ *
+ * If threading support (WASM_ENABLE_THREAD_MGR) is not enabled,
+ * these functions are no-op.
  *
  * If the underlying platform support (OS_ENABLE_WAKEUP_BLOCKING_OP) is
  * not available, these functions are no-op. In that case, the runtime
@@ -1580,7 +1583,7 @@ wasm_runtime_get_context(wasm_module_inst_t inst, void *key);
  *
  * For example, on POSIX-like platforms, a signal (by default SIGUSR1) is
  * used. The signal delivery configurations (eg. signal handler, signal mask,
- * etc) for the signal is set up by the runtime. You can change the signal
+ * etc) for the signal are set up by the runtime. You can change the signal
  * to use for this purpose by calling os_set_signal_number_for_blocking_op
  * before the runtime initialization.
  */

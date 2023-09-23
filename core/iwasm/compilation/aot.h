@@ -34,7 +34,11 @@ extern const char *aot_stack_sizes_name;
 extern const char *aot_stack_sizes_alias_name;
 
 #ifndef AOT_STACK_SIZES_SECTION_NAME
+#if defined(__APPLE__)
+#define AOT_STACK_SIZES_SECTION_NAME ",aot_stack_sizes"
+#else
 #define AOT_STACK_SIZES_SECTION_NAME ".aot_stack_sizes"
+#endif
 #endif
 extern const char *aot_stack_sizes_section_name;
 

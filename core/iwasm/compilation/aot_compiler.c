@@ -2832,7 +2832,10 @@ fail:
     return success;
 }
 
+#if defined(IWASM_AS_LIBRARY)
 extern int nosystem_system(const char* buf);
+#define system nosystem_system
+#endif
 
 bool
 aot_emit_object_file(AOTCompContext *comp_ctx, char *file_name)
@@ -2941,7 +2944,7 @@ aot_emit_object_file(AOTCompContext *comp_ctx, char *file_name)
                      file_name, asm_file_name);
             LOG_VERBOSE("invoking external ASM compiler:\n\t%s", cmd);
 
-            ret = nosystem_system(cmd);
+            ret = system(cmd);
             /* remove temp assembly file */
             unlink(asm_file_name);
 

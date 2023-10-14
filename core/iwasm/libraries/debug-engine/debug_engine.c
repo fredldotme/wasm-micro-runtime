@@ -1120,7 +1120,7 @@ wasm_debug_instance_on_failure(WASMDebugInstance *instance)
     instance->current_state = DBG_ERROR;
     instance->stopped_thread = NULL;
 
-#if 0
+#if 1
     /* terminate the wasm execution thread */
     while (exec_env) {
         /* Resume all threads so they can receive the TERM signal */
@@ -1193,11 +1193,9 @@ wasm_debug_instance_detach(WASMDebugInstance *instance)
 
     wasm_gdbserver_detach(instance->control_thread->server);
 
-#if 0
     exec_env = bh_list_first_elem(&instance->cluster->exec_env_list);
     if (!exec_env)
         return false;
-
 
     while (exec_env) {
         if (instance->current_state == APP_STOPPED) {
@@ -1206,7 +1204,6 @@ wasm_debug_instance_detach(WASMDebugInstance *instance)
         }
         exec_env = bh_list_elem_next(exec_env);
     }
-#endif
 
     /* relaunch, accept new debug connection */
     instance->current_state = DBG_LAUNCHING;

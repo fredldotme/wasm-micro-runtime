@@ -6,7 +6,7 @@
 #include "aot_emit_memory.h"
 #include "aot_emit_exception.h"
 #include "../aot/aot_runtime.h"
-#include "aot_intrinsic.h"
+#include "../aot/aot_intrinsic.h"
 #include "aot_emit_control.h"
 
 #define BUILD_ICMP(op, left, right, res, name)                                \

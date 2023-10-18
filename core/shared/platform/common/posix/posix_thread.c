@@ -418,6 +418,14 @@ os_thread_get_stack_boundary()
     return addr;
 }
 
+void
+os_thread_jit_write_protect_np(bool enabled)
+{
+#if (defined(__APPLE__) || defined(__MACH__)) && defined(__arm64__)
+    pthread_jit_write_protect_np(enabled);
+#endif
+}
+
 #ifdef OS_ENABLE_HW_BOUND_CHECK
 
 #define SIG_ALT_STACK_SIZE (32 * 1024)
@@ -543,14 +551,12 @@ signal_callback(int sig_num, siginfo_t *sig_info, void *sig_ucontext)
     if (prev_sig_act && (prev_sig_act->sa_flags & SA_SIGINFO)) {
         prev_sig_act->sa_sigaction(sig_num, sig_info, sig_ucontext);
     }
-    else if (prev_sig_act && (void *)prev_sig_act->sa_handler == SIG_DFL) {
-        /* Default action */
-        sigaction(sig_num, prev_sig_act, NULL);
-    }
-    else if (prev_sig_act && (void *)prev_sig_act->sa_handler == SIG_IGN) {
-        /* Ignore this signal */
-    }
-    else if (prev_sig_act && prev_sig_act->sa_handler) {
+    else if (prev_sig_act
+             && prev_sig_act->sa_handler
+             /* Filter out SIG_DFL and SIG_IGN here, they will
+                run into the else branch below */
+             && (void *)prev_sig_act->sa_handler != SIG_DFL
+             && (void *)prev_sig_act->sa_handler != SIG_IGN) {
         prev_sig_act->sa_handler(sig_num);
     }
     /* Output signal info and then crash if signal is unhandled */

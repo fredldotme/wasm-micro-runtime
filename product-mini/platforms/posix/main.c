@@ -87,6 +87,9 @@ print_help()
     printf("  --dir=<dir>              Grant wasi access to the given host directories\n");
     printf("                           to the program, for example:\n");
     printf("                             --dir=<dir1> --dir=<dir2>\n");
+    printf("  --map-dir=<guest::host>  Grant wasi access to the given host directories\n");
+    printf("                           to the program at a specific guest path, for example:\n");
+    printf("                             --map-dir=<guest-path1::host-path1> --map-dir=<guest-path2::host-path2>\n");
     printf("  --addr-pool=<addrs>      Grant wasi access to the given network addresses in\n");
     printf("                           CIRD notation to the program, seperated with ',',\n");
     printf("                           for example:\n");
@@ -132,8 +135,7 @@ app_instance_main(wasm_module_inst_t module_inst)
     const char *exception;
 
     wasm_application_execute_main(module_inst, app_argc, app_argv);
-    if ((exception = wasm_runtime_get_exception(module_inst)))
-        printf("%s\n", exception);
+    exception = wasm_runtime_get_exception(module_inst);
     return exception;
 }
 
@@ -432,19 +434,28 @@ handle_module_path(const char *module_path)
 static char *module_search_path = ".";
 
 static bool
-module_reader_callback(const char *module_name, uint8 **p_buffer,
-                       uint32 *p_size)
+module_reader_callback(package_type_t module_type, const char *module_name,
+                       uint8 **p_buffer, uint32 *p_size)
 {
-    const char *format = "%s/%s.wasm";
+    char *file_format = NULL;
+#if WASM_ENABLE_INTERP != 0
+    if (module_type == Wasm_Module_Bytecode)
+        file_format = ".wasm";
+#endif
+#if WASM_ENABLE_AOT != 0
+    if (module_type == Wasm_Module_AoT)
+        file_format = ".aot";
+#endif
+    bh_assert(file_format);
+    const char *format = "%s/%s%s";
     int sz = strlen(module_search_path) + strlen("/") + strlen(module_name)
-             + strlen(".wasm") + 1;
+             + strlen(file_format) + 1;
     char *wasm_file_name = BH_MALLOC(sz);
     if (!wasm_file_name) {
         return false;
     }
-
-    snprintf(wasm_file_name, sz, format, module_search_path, module_name);
-
+    snprintf(wasm_file_name, sz, format, module_search_path, module_name,
+             file_format);
     *p_buffer = (uint8_t *)bh_read_file_to_buffer(wasm_file_name, p_size);
 
     wasm_runtime_free(wasm_file_name);
@@ -581,6 +592,8 @@ main(int argc, char *argv[])
 #if WASM_ENABLE_LIBC_WASI != 0
     const char *dir_list[8] = { NULL };
     uint32 dir_list_size = 0;
+    const char *map_dir_list[8] = { NULL };
+    uint32 map_dir_list_size = 0;
     const char *env_list[8] = { NULL };
     uint32 env_list_size = 0;
     const char *addr_pool[8] = { NULL };
@@ -718,6 +731,16 @@ main(int argc, char *argv[])
                 return 1;
             }
             dir_list[dir_list_size++] = argv[0] + 6;
+        }
+        else if (!strncmp(argv[0], "--map-dir=", 10)) {
+            if (argv[0][10] == '\0')
+                return print_help();
+            if (map_dir_list_size >= sizeof(map_dir_list) / sizeof(char *)) {
+                printf("Only allow max map dir number %d\n",
+                       (int)(sizeof(map_dir_list) / sizeof(char *)));
+                return 1;
+            }
+            map_dir_list[map_dir_list_size++] = argv[0] + 10;
         }
         else if (!strncmp(argv[0], "--env=", 6)) {
             char *tmp_env;
@@ -928,9 +951,9 @@ main(int argc, char *argv[])
     }
 
 #if WASM_ENABLE_LIBC_WASI != 0
-    wasm_runtime_set_wasi_args_ex(wasm_module, dir_list, dir_list_size, NULL, 0,
-                                  env_list, env_list_size, argv, argc,
-                                  dup(fileno(stdin)), dup(fileno(stdout)), dup(fileno(stderr)));
+    wasm_runtime_set_wasi_args(wasm_module, dir_list, dir_list_size,
+                               map_dir_list, map_dir_list_size, env_list,
+                               env_list_size, argv, argc);
 
     wasm_runtime_set_wasi_addr_pool(wasm_module, addr_pool, addr_pool_size);
     wasm_runtime_set_wasi_ns_lookup_pool(wasm_module, ns_lookup_pool,
@@ -986,17 +1009,20 @@ main(int argc, char *argv[])
 #endif
 
     ret = 0;
+    const char *exception = NULL;
     if (is_repl_mode) {
         app_instance_repl(wasm_module_inst);
     }
     else if (func_name) {
-        if (app_instance_func(wasm_module_inst, func_name)) {
+        exception = app_instance_func(wasm_module_inst, func_name);
+        if (exception) {
             /* got an exception */
             ret = 1;
         }
     }
     else {
-        if (app_instance_main(wasm_module_inst)) {
+        exception = app_instance_main(wasm_module_inst);
+        if (exception) {
             /* got an exception */
             ret = 1;
         }
@@ -1008,6 +1034,9 @@ main(int argc, char *argv[])
         ret = wasm_runtime_get_wasi_exit_code(wasm_module_inst);
     }
 #endif
+
+    if (exception)
+        printf("%s\n", exception);
 
 #if WASM_ENABLE_STATIC_PGO != 0 && WASM_ENABLE_AOT != 0
     if (get_package_type(wasm_file_buf, wasm_file_size) == Wasm_Module_AoT

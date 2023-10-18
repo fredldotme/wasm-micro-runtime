@@ -233,7 +233,8 @@ def test_case(
     case_path = pathlib.Path(case_path).resolve()
     case_name = case_path.stem
 
-    CMD.append(case_path)
+    CMD.append(str(case_path))
+    # print(f"============> use {' '.join(CMD)}")
     print(f"============> run {case_name} ", end="")
     with subprocess.Popen(
         CMD,
@@ -530,7 +531,6 @@ def main():
     )
 
     options = parser.parse_args()
-    print(options)
 
 
     if not preflight_check(options.aot_flag, options.eh_flag):

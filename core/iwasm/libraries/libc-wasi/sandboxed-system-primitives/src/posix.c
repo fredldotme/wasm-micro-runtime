@@ -60,98 +60,99 @@ static_assert(sizeof(struct iovec) == sizeof(__wasi_ciovec_t),
 static __wasi_errno_t
 convert_errno(int error)
 {
-    static const __wasi_errno_t errors[] = {
-#define X(v) [v] = __WASI_##v
-        X(E2BIG),
-        X(EACCES),
-        X(EADDRINUSE),
-        X(EADDRNOTAVAIL),
-        X(EAFNOSUPPORT),
-        X(EAGAIN),
-        X(EALREADY),
-        X(EBADF),
-        X(EBADMSG),
-        X(EBUSY),
-        X(ECANCELED),
-        X(ECHILD),
-        X(ECONNABORTED),
-        X(ECONNREFUSED),
-        X(ECONNRESET),
-        X(EDEADLK),
-        X(EDESTADDRREQ),
-        X(EDOM),
-        X(EDQUOT),
-        X(EEXIST),
-        X(EFAULT),
-        X(EFBIG),
-        X(EHOSTUNREACH),
-        X(EIDRM),
-        X(EILSEQ),
-        X(EINPROGRESS),
-        X(EINTR),
-        X(EINVAL),
-        X(EIO),
-        X(EISCONN),
-        X(EISDIR),
-        X(ELOOP),
-        X(EMFILE),
-        X(EMLINK),
-        X(EMSGSIZE),
-        X(EMULTIHOP),
-        X(ENAMETOOLONG),
-        X(ENETDOWN),
-        X(ENETRESET),
-        X(ENETUNREACH),
-        X(ENFILE),
-        X(ENOBUFS),
-        X(ENODEV),
-        X(ENOENT),
-        X(ENOEXEC),
-        X(ENOLCK),
-        X(ENOLINK),
-        X(ENOMEM),
-        X(ENOMSG),
-        X(ENOPROTOOPT),
-        X(ENOSPC),
-        X(ENOSYS),
+    __wasi_errno_t code = __WASI_ENOSYS;
+#define X(v)               \
+    case v:                \
+        code = __WASI_##v; \
+        break;
+    switch (error) {
+        X(E2BIG)
+        X(EACCES)
+        X(EADDRINUSE)
+        X(EADDRNOTAVAIL)
+        X(EAFNOSUPPORT)
+        X(EAGAIN)
+        X(EALREADY)
+        X(EBADF)
+        X(EBADMSG)
+        X(EBUSY)
+        X(ECANCELED)
+        X(ECHILD)
+        X(ECONNABORTED)
+        X(ECONNREFUSED)
+        X(ECONNRESET)
+        X(EDEADLK)
+        X(EDESTADDRREQ)
+        X(EDOM)
+        X(EDQUOT)
+        X(EEXIST)
+        X(EFAULT)
+        X(EFBIG)
+        X(EHOSTUNREACH)
+        X(EIDRM)
+        X(EILSEQ)
+        X(EINPROGRESS)
+        X(EINTR)
+        X(EINVAL)
+        X(EIO)
+        X(EISCONN)
+        X(EISDIR)
+        X(ELOOP)
+        X(EMFILE)
+        X(EMLINK)
+        X(EMSGSIZE)
+        X(EMULTIHOP)
+        X(ENAMETOOLONG)
+        X(ENETDOWN)
+        X(ENETRESET)
+        X(ENETUNREACH)
+        X(ENFILE)
+        X(ENOBUFS)
+        X(ENODEV)
+        X(ENOENT)
+        X(ENOEXEC)
+        X(ENOLCK)
+        X(ENOLINK)
+        X(ENOMEM)
+        X(ENOMSG)
+        X(ENOPROTOOPT)
+        X(ENOSPC)
+        X(ENOSYS)
 #ifdef ENOTCAPABLE
-        X(ENOTCAPABLE),
+        X(ENOTCAPABLE)
 #endif
-        X(ENOTCONN),
-        X(ENOTDIR),
-        X(ENOTEMPTY),
-        X(ENOTRECOVERABLE),
-        X(ENOTSOCK),
-        X(ENOTSUP),
-        X(ENOTTY),
-        X(ENXIO),
-        X(EOVERFLOW),
-        X(EOWNERDEAD),
-        X(EPERM),
-        X(EPIPE),
-        X(EPROTO),
-        X(EPROTONOSUPPORT),
-        X(EPROTOTYPE),
-        X(ERANGE),
-        X(EROFS),
-        X(ESPIPE),
-        X(ESRCH),
-        X(ESTALE),
-        X(ETIMEDOUT),
-        X(ETXTBSY),
-        X(EXDEV),
+        X(ENOTCONN)
+        X(ENOTDIR)
+        X(ENOTEMPTY)
+        X(ENOTRECOVERABLE)
+        X(ENOTSOCK)
+        X(ENOTSUP)
+        X(ENOTTY)
+        X(ENXIO)
+        X(EOVERFLOW)
+        X(EOWNERDEAD)
+        X(EPERM)
+        X(EPIPE)
+        X(EPROTO)
+        X(EPROTONOSUPPORT)
+        X(EPROTOTYPE)
+        X(ERANGE)
+        X(EROFS)
+        X(ESPIPE)
+        X(ESRCH)
+        X(ESTALE)
+        X(ETIMEDOUT)
+        X(ETXTBSY)
+        X(EXDEV)
+        default:
+            if (error == EOPNOTSUPP)
+                code = __WASI_ENOTSUP;
+            else if (code == EWOULDBLOCK)
+                code = __WASI_EAGAIN;
+            break;
+    }
 #undef X
-#if EOPNOTSUPP != ENOTSUP
-        [EOPNOTSUPP] = __WASI_ENOTSUP,
-#endif
-#if EWOULDBLOCK != EAGAIN
-        [EWOULDBLOCK] = __WASI_EAGAIN,
-#endif
-    };
-    if (error < 0 || (size_t)error >= sizeof(errors) / sizeof(errors[0])
-        || errors[error] == 0)
-        return __WASI_ENOSYS;
-    return errors[error];
+    return code;
 }
 
 static bool
@@ -339,7 +340,7 @@ fd_prestats_init(struct fd_prestats *pt)
 
 // Grows the preopened resource table to a required lower bound and a
 // minimum number of free preopened resource table entries.
-static bool
+static __wasi_errno_t
 fd_prestats_grow(struct fd_prestats *pt, size_t min, size_t incr)
     REQUIRES_EXCLUSIVE(pt->lock)
 {
@@ -353,7 +354,7 @@ fd_prestats_grow(struct fd_prestats *pt, size_t min, size_t incr)
         struct fd_prestat *prestats =
             wasm_runtime_malloc((uint32)(sizeof(*prestats) * size));
         if (prestats == NULL)
-            return false;
+            return __WASI_ENOMEM;
 
         if (pt->prestats && pt->size > 0) {
             bh_memcpy_s(prestats, (uint32)(sizeof(*prestats) * size),
@@ -369,27 +370,39 @@ fd_prestats_grow(struct fd_prestats *pt, size_t min, size_t incr)
         pt->prestats = prestats;
         pt->size = size;
     }
-    return true;
+    return __WASI_ESUCCESS;
+}
+
+static __wasi_errno_t
+fd_prestats_insert_locked(struct fd_prestats *pt, const char *dir,
+                          __wasi_fd_t fd)
+{
+    // Grow the preopened resource table if needed.
+    __wasi_errno_t error = fd_prestats_grow(pt, fd, 1);
+
+    if (error != __WASI_ESUCCESS) {
+        return error;
+    }
+
+    pt->prestats[fd].dir = bh_strdup(dir);
+
+    if (pt->prestats[fd].dir == NULL)
+        return __WASI_ENOMEM;
+
+    return __WASI_ESUCCESS;
 }
 
 // Inserts a preopened resource record into the preopened resource table.
 bool
 fd_prestats_insert(struct fd_prestats *pt, const char *dir, __wasi_fd_t fd)
 {
-    // Grow the preopened resource table if needed.
     rwlock_wrlock(&pt->lock);
-    if (!fd_prestats_grow(pt, fd, 1)) {
-        rwlock_unlock(&pt->lock);
-        return false;
-    }
 
-    pt->prestats[fd].dir = bh_strdup(dir);
+    __wasi_errno_t error = fd_prestats_insert_locked(pt, dir, fd);
+
     rwlock_unlock(&pt->lock);
 
-    if (pt->prestats[fd].dir == NULL)
-        return false;
-
-    return true;
+    return error == __WASI_ESUCCESS;
 }
 
 // Looks up a preopened resource table entry by number.
@@ -406,6 +419,24 @@ fd_prestats_get_entry(struct fd_prestats *pt, __wasi_fd_t fd,
 
     *ret = prestat;
     return 0;
+}
+
+// Remove a preopened resource record from the preopened resource table by
+// number
+static __wasi_errno_t
+fd_prestats_remove_entry(struct fd_prestats *pt, __wasi_fd_t fd)
+{
+    // Test for file descriptor existence.
+    if (fd >= pt->size)
+        return __WASI_EBADF;
+    struct fd_prestat *prestat = &pt->prestats[fd];
+
+    if (prestat->dir != NULL) {
+        wasm_runtime_free((void *)prestat->dir);
+        prestat->dir = NULL;
+    }
+
+    return __WASI_ESUCCESS;
 }
 
 struct fd_object {
@@ -679,8 +710,8 @@ fd_object_release(wasm_exec_env_t env, struct fd_object *fo)
 bool
 fd_table_insert_existing(struct fd_table *ft, __wasi_fd_t in, int out)
 {
-    __wasi_filetype_t type;
-    __wasi_rights_t rights_base, rights_inheriting;
+    __wasi_filetype_t type = __WASI_FILETYPE_UNKNOWN;
+    __wasi_rights_t rights_base = 0, rights_inheriting = 0;
     struct fd_object *fo;
     __wasi_errno_t error;
 
@@ -819,12 +850,14 @@ wasmtime_ssp_fd_prestat_dir_name(struct fd_prestats *prestats, __wasi_fd_t fd,
         rwlock_unlock(&prestats->lock);
         return error;
     }
-    if (path_len != strlen(prestat->dir)) {
+
+    const size_t prestat_dir_len = strlen(prestat->dir);
+    if (path_len < prestat_dir_len) {
         rwlock_unlock(&prestats->lock);
-        return EINVAL;
+        return __WASI_EINVAL;
     }
 
-    bh_memcpy_s(path, (uint32)path_len, prestat->dir, (uint32)path_len);
+    bh_memcpy_s(path, (uint32)path_len, prestat->dir, (uint32)prestat_dir_len);
 
     rwlock_unlock(&prestats->lock);
 
@@ -835,25 +868,15 @@ __wasi_errno_t
 wasmtime_ssp_fd_close(wasm_exec_env_t exec_env, struct fd_table *curfds,
                       struct fd_prestats *prestats, __wasi_fd_t fd)
 {
-    // Don't allow closing a pre-opened resource.
-    // TODO: Eventually, we do want to permit this, once libpreopen in
-    // userspace is capable of removing entries from its tables as well.
-    {
-        rwlock_rdlock(&prestats->lock);
-        struct fd_prestat *prestat;
-        __wasi_errno_t error = fd_prestats_get_entry(prestats, fd, &prestat);
-        rwlock_unlock(&prestats->lock);
-        if (error == 0) {
-            return __WASI_ENOTSUP;
-        }
-    }
-
     // Validate the file descriptor.
     struct fd_table *ft = curfds;
     rwlock_wrlock(&ft->lock);
+    rwlock_wrlock(&prestats->lock);
+
     struct fd_entry *fe;
     __wasi_errno_t error = fd_table_get_entry(ft, fd, 0, 0, &fe);
     if (error != 0) {
+        rwlock_unlock(&prestats->lock);
         rwlock_unlock(&ft->lock);
         return error;
     }
@@ -861,9 +884,20 @@ wasmtime_ssp_fd_close(wasm_exec_env_t exec_env, struct fd_table *curfds,
     // Remove it from the file descriptor table.
     struct fd_object *fo;
     fd_table_detach(ft, fd, &fo);
+
+    // Remove it from the preopened resource table if it exists
+    error = fd_prestats_remove_entry(prestats, fd);
+
+    rwlock_unlock(&prestats->lock);
     rwlock_unlock(&ft->lock);
     fd_object_release(exec_env, fo);
-    return 0;
+
+    // Ignore the error if there is no preopen associated with this fd
+    if (error == __WASI_EBADF) {
+        return __WASI_ESUCCESS;
+    }
+
+    return error;
 }
 
 // Look up a file descriptor object in a locked file descriptor table
@@ -1079,33 +1113,21 @@ wasmtime_ssp_fd_renumber(wasm_exec_env_t exec_env, struct fd_table *curfds,
                          struct fd_prestats *prestats, __wasi_fd_t from,
                          __wasi_fd_t to)
 {
-    // Don't allow renumbering over a pre-opened resource.
-    // TODO: Eventually, we do want to permit this, once libpreopen in
-    // userspace is capable of removing entries from its tables as well.
-    {
-        rwlock_rdlock(&prestats->lock);
-        struct fd_prestat *prestat;
-        __wasi_errno_t error = fd_prestats_get_entry(prestats, to, &prestat);
-        if (error != 0) {
-            error = fd_prestats_get_entry(prestats, from, &prestat);
-        }
-        rwlock_unlock(&prestats->lock);
-        if (error == 0) {
-            return __WASI_ENOTSUP;
-        }
-    }
-
     struct fd_table *ft = curfds;
     rwlock_wrlock(&ft->lock);
+    rwlock_wrlock(&prestats->lock);
+
     struct fd_entry *fe_from;
     __wasi_errno_t error = fd_table_get_entry(ft, from, 0, 0, &fe_from);
     if (error != 0) {
+        rwlock_unlock(&prestats->lock);
         rwlock_unlock(&ft->lock);
         return error;
     }
     struct fd_entry *fe_to;
     error = fd_table_get_entry(ft, to, 0, 0, &fe_to);
     if (error != 0) {
+        rwlock_unlock(&prestats->lock);
         rwlock_unlock(&ft->lock);
         return error;
     }
@@ -1122,8 +1144,53 @@ wasmtime_ssp_fd_renumber(wasm_exec_env_t exec_env, struct fd_table *curfds,
     fd_object_release(exec_env, fo);
     --ft->used;
 
+    // Handle renumbering of any preopened resources
+    struct fd_prestat *prestat_from;
+    __wasi_errno_t prestat_from_error =
+        fd_prestats_get_entry(prestats, from, &prestat_from);
+
+    struct fd_prestat *prestat_to;
+    __wasi_errno_t prestat_to_error =
+        fd_prestats_get_entry(prestats, to, &prestat_to);
+
+    // Renumbering over two preopened resources.
+    if (prestat_from_error == __WASI_ESUCCESS
+        && prestat_to_error == __WASI_ESUCCESS) {
+        (void)fd_prestats_remove_entry(prestats, to);
+
+        error = fd_prestats_insert_locked(prestats, prestat_from->dir, to);
+
+        if (error == __WASI_ESUCCESS) {
+            (void)fd_prestats_remove_entry(prestats, from);
+        }
+        else {
+            (void)fd_prestats_remove_entry(prestats, to);
+        }
+    }
+    // Renumbering from a non-preopened fd to a preopened fd. In this case, we
+    // can't a keep the destination fd entry in the preopened table so remove
+    // it entirely.
+    else if (prestat_from_error != __WASI_ESUCCESS
+             && prestat_to_error == __WASI_ESUCCESS) {
+        (void)fd_prestats_remove_entry(prestats, to);
+    }
+    // Renumbering from a preopened fd to a non-preopened fd
+    else if (prestat_from_error == __WASI_ESUCCESS
+             && prestat_to_error != __WASI_ESUCCESS) {
+        error = fd_prestats_insert_locked(prestats, prestat_from->dir, to);
+
+        if (error == __WASI_ESUCCESS) {
+            (void)fd_prestats_remove_entry(prestats, from);
+        }
+        else {
+            (void)fd_prestats_remove_entry(prestats, to);
+        }
+    }
+
+    rwlock_unlock(&prestats->lock);
     rwlock_unlock(&ft->lock);
-    return 0;
+
+    return error;
 }
 
 __wasi_errno_t
@@ -1216,18 +1283,20 @@ wasmtime_ssp_fd_fdstat_get(wasm_exec_env_t exec_env, struct fd_table *curfds,
 
     if ((ret & O_APPEND) != 0)
         buf->fs_flags |= __WASI_FDFLAG_APPEND;
-#ifdef O_DSYNC
+#ifdef CONFIG_HAS_O_DSYNC
     if ((ret & O_DSYNC) != 0)
         buf->fs_flags |= __WASI_FDFLAG_DSYNC;
 #endif
     if ((ret & O_NONBLOCK) != 0)
         buf->fs_flags |= __WASI_FDFLAG_NONBLOCK;
-#ifdef O_RSYNC
+#ifdef CONFIG_HAS_O_RSYNC
     if ((ret & O_RSYNC) != 0)
         buf->fs_flags |= __WASI_FDFLAG_RSYNC;
 #endif
+#ifdef CONFIG_HAS_O_SYNC
     if ((ret & O_SYNC) != 0)
         buf->fs_flags |= __WASI_FDFLAG_SYNC;
+#endif
     return 0;
 }
 
@@ -1240,21 +1309,25 @@ wasmtime_ssp_fd_fdstat_set_flags(wasm_exec_env_t exec_env,
     if ((fs_flags & __WASI_FDFLAG_APPEND) != 0)
         noflags |= O_APPEND;
     if ((fs_flags & __WASI_FDFLAG_DSYNC) != 0)
-#ifdef O_DSYNC
+#ifdef CONFIG_HAS_O_DSYNC
         noflags |= O_DSYNC;
 #else
-        noflags |= O_SYNC;
+        return __WASI_ENOTSUP;
 #endif
     if ((fs_flags & __WASI_FDFLAG_NONBLOCK) != 0)
         noflags |= O_NONBLOCK;
     if ((fs_flags & __WASI_FDFLAG_RSYNC) != 0)
-#ifdef O_RSYNC
+#ifdef CONFIG_HAS_O_RSYNC
         noflags |= O_RSYNC;
 #else
-        noflags |= O_SYNC;
+        return __WASI_ENOTSUP;
 #endif
     if ((fs_flags & __WASI_FDFLAG_SYNC) != 0)
+#ifdef CONFIG_HAS_O_SYNC
         noflags |= O_SYNC;
+#else
+        return __WASI_ENOTSUP;
+#endif
 
     struct fd_object *fo;
     __wasi_errno_t error =
@@ -1905,26 +1978,30 @@ wasmtime_ssp_path_open(wasm_exec_env_t exec_env, struct fd_table *curfds,
     if ((fs_flags & __WASI_FDFLAG_APPEND) != 0)
         noflags |= O_APPEND;
     if ((fs_flags & __WASI_FDFLAG_DSYNC) != 0) {
-#ifdef O_DSYNC
+#ifdef CONFIG_HAS_O_DSYNC
         noflags |= O_DSYNC;
-#else
-        noflags |= O_SYNC;
-#endif
         needed_inheriting |= __WASI_RIGHT_FD_DATASYNC;
+#else
+        return __WASI_ENOTSUP;
+#endif
     }
     if ((fs_flags & __WASI_FDFLAG_NONBLOCK) != 0)
         noflags |= O_NONBLOCK;
     if ((fs_flags & __WASI_FDFLAG_RSYNC) != 0) {
-#ifdef O_RSYNC
+#ifdef CONFIG_HAS_O_RSYNC
         noflags |= O_RSYNC;
-#else
-        noflags |= O_SYNC;
-#endif
         needed_inheriting |= __WASI_RIGHT_FD_SYNC;
+#else
+        return __WASI_ENOTSUP;
+#endif
     }
     if ((fs_flags & __WASI_FDFLAG_SYNC) != 0) {
+#ifdef CONFIG_HAS_O_SYNC
         noflags |= O_SYNC;
         needed_inheriting |= __WASI_RIGHT_FD_SYNC;
+#else
+        return __WASI_ENOTSUP;
+#endif
     }
     if (write && (noflags & (O_APPEND | O_TRUNC)) == 0)
         needed_inheriting |= __WASI_RIGHT_FD_SEEK;

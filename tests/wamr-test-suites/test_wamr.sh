@@ -62,7 +62,7 @@ QEMU_FIRMWARE=""
 # prod/testsuite-all branch
 WASI_TESTSUITE_COMMIT="ee807fc551978490bf1c277059aabfa1e589a6c2"
 
-while getopts ":s:cabgvt:m:MCpSXxwPGQF:j:" opt
+while getopts ":s:cabgvt:m:MCpSXexwPGQF:j:" opt
 do
     OPT_PARSED="TRUE"
     case $opt in

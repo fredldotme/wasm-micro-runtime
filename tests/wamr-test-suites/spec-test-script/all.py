@@ -67,8 +67,8 @@ def ignore_the_case(
     simd_flag=False,
     gc_flag=False,
     xip_flag=False,
+    qemu_flag=False,
     eh_flag=False,
-    qemu_flag=False
 ):
     # print(f"case_name {case_name}\n")
     if eh_flag and case_name in [ "tag", "try_catch", "rethrow", "try_delegate" ]:
@@ -160,23 +160,6 @@ def test_case(
     qemu_firmware="",
     log="",
 ):
-    case_path = pathlib.Path(case_path).resolve()
-    case_name = case_path.stem
-
-    if ignore_the_case(
-        case_name,
-        target,
-        aot_flag,
-        sgx_flag,
-        multi_module_flag,
-        multi_thread_flag,
-        simd_flag,
-        gc_flag,
-        xip_flag,
-        eh_flag,
-        qemu_flag
-    ):
-        return True
 
     CMD = ["python3", "runtest.py"]
     CMD.append("--wast2wasm")
@@ -330,6 +313,7 @@ def test_suite(
             gc_flag,
             xip_flag,
             qemu_flag,
+            eh_flag,
         ):
             filtered_case_list.append(case_path)
     print(f"---> {len(case_list)} --filter--> {len(filtered_case_list)}")

@@ -1229,11 +1229,12 @@ load_tag_import(const uint8 **p_buf, const uint8 *buf_end,
 {
     WASMExport *export = 0;
     WASMModule *sub_module = NULL;
+    uint32 i;
 
 #if WASM_ENABLE_MULTI_MODULE != 0
     if (!wasm_runtime_is_built_in_module(sub_module_name)) {
-        sub_module = load_depended_module(parent_module, sub_module_name,
-                                          error_buf, error_buf_size);
+        sub_module = wasm_runtime_load_depended_module(parent_module, sub_module_name,
+                                                       error_buf, error_buf_size);
         if (!sub_module) {
             return false;
         }
@@ -1248,7 +1249,6 @@ load_tag_import(const uint8 **p_buf, const uint8 *buf_end,
         goto fail;
     }
     sub_module = (WASMModule *)module_reg;
-    uint32 i;
 
     export = sub_module->exports;
     for (i = 0; i < sub_module->export_count; i++, export ++) {
@@ -2673,9 +2673,7 @@ load_tag_section(const uint8 *buf, const uint8 *buf_end, const uint8 *buf_code,
 
     /* get tag count */
     read_leb_uint32(p, p_end, section_tag_count);
-    module->tag_count =
-        module->import_tag_count
-        + section_tag_count; 
+    module->tag_count = module->import_tag_count + section_tag_count;
 
     if (section_tag_count) {
         total_size = sizeof(WASMTag) * module->tag_count;

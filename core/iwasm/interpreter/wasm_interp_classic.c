@@ -3557,9 +3557,17 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
                         maddr = memory->memory_data + (uint32)addr;
 #endif
 
-                        seg_len = (uint64)module->module->data_segments[segment]
-                                      ->data_length;
-                        data = module->module->data_segments[segment]->data;
+                        if (bh_bitmap_get_bit(module->e->common.data_dropped,
+                                              segment)) {
+                            seg_len = 0;
+                            data = NULL;
+                        }
+                        else {
+                            seg_len =
+                                (uint64)module->module->data_segments[segment]
+                                    ->data_length;
+                            data = module->module->data_segments[segment]->data;
+                        }
                         if (offset + bytes > seg_len)
                             goto out_of_bounds;
 
@@ -3572,7 +3580,8 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
                         uint32 segment;
 
                         read_leb_uint32(frame_ip, frame_ip_end, segment);
-                        module->module->data_segments[segment]->data_length = 0;
+                        bh_bitmap_set_bit(module->e->common.data_dropped,
+                                          segment);
                         break;
                     }
                     case WASM_OP_MEMORY_COPY:
@@ -3667,8 +3676,8 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
                             break;
                         }
 
-                        if (module->module->table_segments[elem_idx]
-                                .is_dropped) {
+                        if (bh_bitmap_get_bit(module->e->common.elem_dropped,
+                                              elem_idx)) {
                             wasm_set_exception(module,
                                                "out of bounds table access");
                             goto got_exception;
@@ -3700,8 +3709,8 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
                         read_leb_uint32(frame_ip, frame_ip_end, elem_idx);
                         bh_assert(elem_idx < module->module->table_seg_count);
 
-                        module->module->table_segments[elem_idx].is_dropped =
-                            true;
+                        bh_bitmap_set_bit(module->e->common.elem_dropped,
+                                          elem_idx);
                         break;
                     }
                     case WASM_OP_TABLE_COPY:

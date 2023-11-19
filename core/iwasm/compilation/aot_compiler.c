@@ -36,6 +36,10 @@
 #include "debug/dwarf_extractor.h"
 #endif
 
+#ifdef __APPLE__
+#include <TargetConditionals.h>
+#endif
+
 #define CHECK_BUF(buf, buf_end, length)                             \
     do {                                                            \
         if (buf + length > buf_end) {                               \
@@ -2832,11 +2836,6 @@ fail:
     return success;
 }
 
-#if defined(IWASM_AS_LIBRARY)
-extern int nosystem_system(const char* buf);
-#define system nosystem_system
-#endif
-
 bool
 aot_emit_object_file(AOTCompContext *comp_ctx, char *file_name)
 {
@@ -2846,7 +2845,7 @@ aot_emit_object_file(AOTCompContext *comp_ctx, char *file_name)
 
     bh_print_time("Begin to emit object file");
 
-#if !(defined(_WIN32) || defined(_WIN32_))
+#if !(defined(_WIN32) || defined(_WIN32_) || TARGET_OS_IPHONE)
     if (comp_ctx->external_llc_compiler || comp_ctx->external_asm_compiler) {
         char cmd[1024];
         int ret;
@@ -2957,7 +2956,7 @@ aot_emit_object_file(AOTCompContext *comp_ctx, char *file_name)
 
         return true;
     }
-#endif /* end of !(defined(_WIN32) || defined(_WIN32_)) */
+#endif /* end of !(defined(_WIN32) || defined(_WIN32_) || TARGET_OS_IPHONE) */
 
     if (!strncmp(LLVMGetTargetName(target), "arc", 3))
         /* Emit to assmelby file instead for arc target

@@ -14,7 +14,7 @@ function help()
 {
     echo "test_wamr.sh [options]"
     echo "-c clean previous test results, not start test"
-    echo "-s {suite_name} test only one suite (spec|wasi_certification|wamr_compiler)"
+    echo "-s {suite_name} test only one suite (spec|wasi_certification|wamr_compiler|exception)"
     echo "-m set compile target of iwasm(x86_64|x86_32|armv7_vfp|thumbv7_vfp|riscv64_lp64d|riscv64_lp64|aarch64)"
     echo "-t set compile type of iwasm(classic-interp|fast-interp|jit|aot|fast-jit|multi-tier-jit)"
     echo "-M enable multi module feature"
@@ -22,7 +22,6 @@ function help()
     echo "-S enable SIMD feature"
     echo "-G enable GC feature"
     echo "-X enable XIP feature"
-    # added to support WASM_ENABLE_EXCE_HANDLING
     echo "-e enable exception handling"
     echo "-x test SGX"
     echo "-w enable WASI threads"
@@ -34,6 +33,7 @@ function help()
     echo "-F set the firmware path used by qemu"
     echo "-C enable code coverage collect"
     echo "-j set the platform to test"
+    echo "-T set sanitizer to use in tests(ubsan|tsan|asan)"
 }
 
 OPT_PARSED=""
@@ -55,14 +55,20 @@ ENABLE_GC_HEAP_VERIFY=0
 #unit test case arrary
 TEST_CASE_ARR=()
 SGX_OPT=""
-PLATFORM=$(uname -s | tr A-Z a-z)
+if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
+    PLATFORM=windows
+    PYTHON_EXE=python
+else
+    PLATFORM=$(uname -s | tr A-Z a-z)
+    PYTHON_EXE=python3
+fi
 PARALLELISM=0
 ENABLE_QEMU=0
 QEMU_FIRMWARE=""
 # prod/testsuite-all branch
 WASI_TESTSUITE_COMMIT="ee807fc551978490bf1c277059aabfa1e589a6c2"
 
-while getopts ":s:cabgvt:m:MCpSXexwPGQF:j:" opt
+while getopts ":s:cabgvt:m:MCpSXexwPGQF:j:T:" opt
 do
     OPT_PARSED="TRUE"
     case $opt in
@@ -172,9 +178,14 @@ do
         echo "test platform " ${OPTARG}
         PLATFORM=${OPTARG}
         ;;
+        T)
+        echo "sanitizer is " ${OPTARG}
+        WAMR_BUILD_SANITIZER=${OPTARG}
+        ;;
         ?)
         help
-        exit 1;;
+        exit 1
+        ;;
     esac
 done
 
@@ -331,15 +342,18 @@ function setup_wabt()
                 darwin)
                     WABT_PLATFORM=macos
                     ;;
+                windows)
+                    WABT_PLATFORM=windows
+                    ;;
                 *)
                     echo "wabt platform for ${PLATFORM} in unknown"
                     exit 1
                     ;;
             esac
             if [ ! -f /tmp/wabt-1.0.31-${WABT_PLATFORM}.tar.gz ]; then
-                wget \
+                curl -L \
                     https://github.com/WebAssembly/wabt/releases/download/1.0.31/wabt-1.0.31-${WABT_PLATFORM}.tar.gz \
-                    -P /tmp
+                    -o /tmp/wabt-1.0.31-${WABT_PLATFORM}.tar.gz
             fi
 
             cd /tmp \
@@ -393,7 +407,7 @@ function spec_test()
         git apply ../../spec-test-script/simd_ignore_cases.patch
     fi
     if [[ ${ENABLE_MULTI_MODULE} == 1 && $1 == 'aot'  ]]; then
-        git apply ../../spec-test-script/muti_module_aot_ignore_cases.patch
+        git apply ../../spec-test-script/multi_module_aot_ignore_cases.patch
     fi
 
     # udpate thread cases
@@ -411,6 +425,26 @@ function spec_test()
 
         git apply ../../spec-test-script/thread_proposal_ignore_cases.patch
         git apply ../../spec-test-script/thread_proposal_fix_atomic_case.patch
+    fi
+
+    if [ ${ENABLE_EH} == 1 ]; then
+        echo "checkout exception-handling test cases"
+        popd
+        if [ ! -d "exception-handling" ];then
+            echo "exception-handling not exist, clone it from github"
+            git clone -b master --single-branch https://github.com/WebAssembly/exception-handling 
+        fi
+        pushd exception-handling
+
+        # restore and clean everything
+        git reset --hard 51c721661b671bb7dc4b3a3acb9e079b49778d36
+        
+        if [[ ${ENABLE_MULTI_MODULE} == 0 ]]; then
+            git apply ../../spec-test-script/exception_handling_noimport.patch
+        fi
+        
+        popd
+        echo $(pwd)
     fi
 
     # update GC cases
@@ -449,6 +483,10 @@ function spec_test()
         if [[ $1 == 'classic-interp' || $1 == 'fast-interp' || $1 == 'aot' ]]; then
             ARGS_FOR_SPEC_TEST+="-M "
         fi
+    fi
+
+    if [[ 1 == ${ENABLE_EH} ]]; then
+        ARGS_FOR_SPEC_TEST+="-e "
     fi
 
     # sgx only enable in interp mode and aot mode
@@ -494,12 +532,16 @@ function spec_test()
         ARGS_FOR_SPEC_TEST+="--qemu-firmware ${QEMU_FIRMWARE} "
     fi
 
+    if [[ ${PLATFORM} == "windows" ]]; then
+        ARGS_FOR_SPEC_TEST+="--no-pty "
+    fi
+
     # set log directory
     ARGS_FOR_SPEC_TEST+="--log ${REPORT_DIR}"
 
     cd ${WORK_DIR}
-    echo "python3 ./all.py ${ARGS_FOR_SPEC_TEST} | tee -a ${REPORT_DIR}/spec_test_report.txt"
-    python3 ./all.py ${ARGS_FOR_SPEC_TEST} | tee -a ${REPORT_DIR}/spec_test_report.txt
+    echo "${PYTHON_EXE} ./all.py ${ARGS_FOR_SPEC_TEST} | tee -a ${REPORT_DIR}/spec_test_report.txt"
+    ${PYTHON_EXE} ./all.py ${ARGS_FOR_SPEC_TEST} | tee -a ${REPORT_DIR}/spec_test_report.txt
     if [[ ${PIPESTATUS[0]} -ne 0 ]];then
         echo -e "\nspec tests FAILED" | tee -a ${REPORT_DIR}/spec_test_report.txt
         exit 1
@@ -508,88 +550,6 @@ function spec_test()
 
     echo -e "\nFinish spec tests" | tee -a ${REPORT_DIR}/spec_test_report.txt
 }
-
-function exception_test()
-{
-    echo "Now start exception tests"
-    touch ${REPORT_DIR}/exception_test_report.txt
-
-    cd ${WORK_DIR}
-    if [ ! -d "exception-handling" ];then
-        echo "exception-handling not exist, clone it from github"
-        git clone -b master --single-branch https://github.com/WebAssembly/exception-handling
-    fi
-
-    pushd exception-handling
-
-    # restore and clean everything
-    git reset --hard HEAD
-
-    popd
-    echo $(pwd)
-
-    if [ ${WABT_BINARY_RELEASE} == "YES" ]; then
-        echo "download a binary release and install"
-        local WAT2WASM=${WORK_DIR}/wabt/out/gcc/Release/wat2wasm
-        if [ ! -f ${WAT2WASM} ]; then
-            case ${PLATFORM} in
-                linux)
-                    WABT_PLATFORM=ubuntu
-                    ;;
-                darwin)
-                    WABT_PLATFORM=macos
-                    ;;
-                *)
-                    echo "wabt platform for ${PLATFORM} in unknown"
-                    exit 1
-                    ;;
-            esac
-            if [ ! -f /tmp/wabt-1.0.31-${WABT_PLATFORM}.tar.gz ]; then
-                wget \
-                    https://github.com/WebAssembly/wabt/releases/download/1.0.31/wabt-1.0.31-${WABT_PLATFORM}.tar.gz \
-                    -P /tmp
-            fi
-
-            cd /tmp \
-            && tar zxf wabt-1.0.31-${WABT_PLATFORM}.tar.gz \
-            && mkdir -p ${WORK_DIR}/wabt/out/gcc/Release/ \
-            && install wabt-1.0.31/bin/wa* ${WORK_DIR}/wabt/out/gcc/Release/ \
-            && cd -
-        fi
-    else
-        echo "download source code and compile and install"
-        if [ ! -d "wabt" ];then
-            echo "wabt not exist, clone it from github"
-            git clone --recursive https://github.com/WebAssembly/wabt
-        fi
-        echo "upate wabt"
-        cd wabt
-        git pull
-        git reset --hard origin/main
-        cd ..
-        make -C wabt gcc-release -j 4
-    fi
-
-    ln -sf ${WORK_DIR}/../spec-test-script/all.py .
-    ln -sf ${WORK_DIR}/../spec-test-script/runtest.py .
-
-    local ARGS_FOR_SPEC_TEST="-e --no_clean_up "
-
-    # set log directory
-    ARGS_FOR_SPEC_TEST+="--log ${REPORT_DIR}"
-
-    cd ${WORK_DIR}
-    echo "python3 ./all.py ${ARGS_FOR_SPEC_TEST} | tee -a ${REPORT_DIR}/exception_test_report.txt"
-    python3 ./all.py ${ARGS_FOR_SPEC_TEST} | tee -a ${REPORT_DIR}/exception_test_report.txt
-    if [[ ${PIPESTATUS[0]} -ne 0 ]];then
-        echo -e "\nspec tests FAILED" | tee -a ${REPORT_DIR}/exception_test_report.txt
-        exit 1
-    fi
-    cd -
-
-    echo -e "\nFinish exception tests" | tee -a ${REPORT_DIR}/exception_test_report.txt
-}
-
 
 function wasi_test()
 {
@@ -642,7 +602,7 @@ function wasi_certification_test()
     cd wasi-testsuite
     git reset --hard ${WASI_TESTSUITE_COMMIT}
 
-    bash ../../wasi-test-script/run_wasi_tests.sh $1 $TARGET \
+    TSAN_OPTIONS=${TSAN_OPTIONS} bash ../../wasi-test-script/run_wasi_tests.sh $1 $TARGET $WASI_TEST_FILTER \
         | tee -a ${REPORT_DIR}/wasi_test_report.txt
     ret=${PIPESTATUS[0]}
 
@@ -772,7 +732,7 @@ function build_iwasm_with_cfg()
         && if [ -d build ]; then rm -rf build/*; else mkdir build; fi \
         && cd build \
         && cmake $* .. \
-        && make -j 4
+        && cmake --build . -j 4 --config RelWithDebInfo
     fi
 
     if [ "$?" != 0 ];then
@@ -898,7 +858,6 @@ function trigger()
     if [[ ${ENABLE_EH} == 1 ]]; then
         EXTRA_COMPILE_FLAGS+=" -DWAMR_BUILD_EXCE_HANDLING=1"
         EXTRA_COMPILE_FLAGS+=" -DWAMR_BUILD_TAIL_CALL=1"
-	EXTRA_COMPILE_FLAGS+=" -DWAMR_BUILD_MULTI_MODULE=1"
     fi
     echo "SANITIZER IS" $WAMR_BUILD_SANITIZER
 
@@ -915,6 +874,17 @@ function trigger()
     if [[ "$WAMR_BUILD_SANITIZER" == "tsan" ]]; then
         echo "Setting run with tsan"
         EXTRA_COMPILE_FLAGS+=" -DWAMR_BUILD_SANITIZER=tsan"
+    fi
+
+    # Make sure we're using the builtin WASI libc implementation
+    # if we're running the wasi certification tests.
+    if [[ $TEST_CASE_ARR ]]; then
+        for test in "${TEST_CASE_ARR[@]}"; do
+            if [[ "$test" == "wasi_certification" ]]; then
+                EXTRA_COMPILE_FLAGS+=" -DWAMR_BUILD_LIBC_UVWASI=0 -DWAMR_BUILD_LIBC_WASI=1"
+                break
+            fi
+        done
     fi
 
     for t in "${TYPE[@]}"; do

@@ -6,7 +6,7 @@
 
 import argparse
 import multiprocessing as mp
-import os
+import platform
 import pathlib
 import subprocess
 import sys
@@ -28,14 +28,29 @@ To run a single GC case:
     --aot-compiler wamrc --gc spec/test/core/xxx.wast
 """
 
-PLATFORM_NAME = os.uname().sysname.lower()
-IWASM_CMD = "../../../product-mini/platforms/" + PLATFORM_NAME + "/build/iwasm"
+def exe_file_path(base_path: str) -> str:
+    if platform.system().lower() == "windows":
+        base_path += ".exe"
+    return base_path
+
+def get_iwasm_cmd(platform: str) -> str:
+    build_path = "../../../product-mini/platforms/" + platform + "/build/"
+    exe_name = "iwasm"
+
+    if platform == "windows":
+        build_path += "RelWithDebInfo/"
+
+    return exe_file_path(build_path + exe_name)
+
+PLATFORM_NAME = platform.uname().system.lower()
+IWASM_CMD = get_iwasm_cmd(PLATFORM_NAME)
 IWASM_SGX_CMD = "../../../product-mini/platforms/linux-sgx/enclave-sample/iwasm"
 IWASM_QEMU_CMD = "iwasm"
 SPEC_TEST_DIR = "spec/test/core"
-WAST2WASM_CMD = "./wabt/out/gcc/Release/wat2wasm"
+WAST2WASM_CMD = exe_file_path("./wabt/out/gcc/Release/wat2wasm")
 SPEC_INTERPRETER_CMD = "spec/interpreter/wasm"
 WAMRC_CMD = "../../../wamr-compiler/build/wamrc"
+EXCE_HANDLING_DIR = "exception-handling/test/core"
 
 
 class TargetAction(argparse.Action):
@@ -67,15 +82,9 @@ def ignore_the_case(
     simd_flag=False,
     gc_flag=False,
     xip_flag=False,
-    qemu_flag=False,
     eh_flag=False,
+    qemu_flag=False,
 ):
-    # print(f"case_name {case_name}\n")
-    if eh_flag and case_name in [ "tag", "try_catch", "rethrow", "try_delegate" ]:
-        return False
-    else:
-        return True
-
 
     if case_name in ["comments", "inline-module", "names"]:
         return True
@@ -124,10 +133,6 @@ def ignore_the_case(
 
 
 def preflight_check(aot_flag, eh_flag):
-    global SPEC_TEST_DIR
-    if eh_flag:
-        SPEC_TEST_DIR="exception-handling/test/core"
-    
     if not pathlib.Path(SPEC_TEST_DIR).resolve().exists():
         print(f"Can not find {SPEC_TEST_DIR}")
         return False
@@ -138,6 +143,10 @@ def preflight_check(aot_flag, eh_flag):
 
     if aot_flag and not pathlib.Path(WAMRC_CMD).resolve().exists():
         print(f"Can not find {WAMRC_CMD}")
+        return False
+
+    if eh_flag and not pathlib.Path(EXCE_HANDLING_DIR).resolve().exists():
+        print(f"Can not find {EXCE_HANDLING_DIR}")
         return False
 
     return True
@@ -159,9 +168,9 @@ def test_case(
     qemu_flag=False,
     qemu_firmware="",
     log="",
+    no_pty=False
 ):
-
-    CMD = ["python3", "runtest.py"]
+    CMD = [sys.executable, "runtest.py"]
     CMD.append("--wast2wasm")
     CMD.append(WAST2WASM_CMD if not gc_flag else SPEC_INTERPRETER_CMD)
     CMD.append("--interpreter")
@@ -171,6 +180,8 @@ def test_case(
         CMD.append(IWASM_QEMU_CMD)
     else:
         CMD.append(IWASM_CMD)
+    if no_pty:
+        CMD.append("--no-pty")
     CMD.append("--aot-compiler")
     CMD.append(WAMRC_CMD)
 
@@ -279,11 +290,8 @@ def test_suite(
     qemu_flag=False,
     qemu_firmware="",
     log="",
+    no_pty=False,
 ):
-    global SPEC_TEST_DIR
-    if eh_flag:
-        SPEC_TEST_DIR="exception-handling/test/core"
-    
     suite_path = pathlib.Path(SPEC_TEST_DIR).resolve()
     if not suite_path.exists():
         print(f"can not find spec test cases at {suite_path}")
@@ -297,6 +305,15 @@ def test_suite(
     if gc_flag:
         gc_case_list = sorted(suite_path.glob("gc/*.wast"))
         case_list.extend(gc_case_list)
+
+    if eh_flag:
+        eh_path = pathlib.Path(EXCE_HANDLING_DIR).resolve()
+        if not eh_path.exists():
+            print(f"can not find spec test cases at {eh_path}")
+            return False
+        eh_case_list = sorted(eh_path.glob("*.wast"))
+        eh_case_list_include = [test for test in eh_case_list if test.stem in ["throw", "tag", "try_catch", "rethrow", "try_delegate"]]
+        case_list.extend(eh_case_list_include)
 
     # ignore based on command line options
     filtered_case_list = []
@@ -312,8 +329,8 @@ def test_suite(
             simd_flag,
             gc_flag,
             xip_flag,
-            qemu_flag,
             eh_flag,
+            qemu_flag,
         ):
             filtered_case_list.append(case_path)
     print(f"---> {len(case_list)} --filter--> {len(filtered_case_list)}")
@@ -346,6 +363,7 @@ def test_suite(
                         qemu_flag,
                         qemu_firmware,
                         log,
+                        no_pty,
                     ],
                 )
 
@@ -384,6 +402,7 @@ def test_suite(
                     qemu_flag,
                     qemu_firmware,
                     log,
+                    no_pty,
                 )
                 successful_case += 1
             except Exception as e:
@@ -513,6 +532,8 @@ def main():
         nargs="*",
         help=f"Specify all wanted cases. If not the script will go through all cases under {SPEC_TEST_DIR}",
     )
+    parser.add_argument('--no-pty', action='store_true',
+        help="Use direct pipes instead of pseudo-tty")
 
     options = parser.parse_args()
 
@@ -544,6 +565,7 @@ def main():
             options.qemu_flag,
             options.qemu_firmware,
             options.log,
+            options.no_pty
         )
         end = time.time_ns()
         print(
@@ -568,6 +590,7 @@ def main():
                     options.qemu_flag,
                     options.qemu_firmware,
                     options.log,
+                    options.no_pty,
                 )
             else:
                 ret = True

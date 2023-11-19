@@ -27,6 +27,9 @@ typedef struct WASMFunctionInstance WASMFunctionInstance;
 typedef struct WASMMemoryInstance WASMMemoryInstance;
 typedef struct WASMTableInstance WASMTableInstance;
 typedef struct WASMGlobalInstance WASMGlobalInstance;
+#if WASM_ENABLE_TAGS != 0
+typedef struct WASMTagInstance WASMTagInstance;
+#endif
 
 /**
  * When LLVM JIT, WAMR compiler or AOT is enabled, we should ensure that
@@ -79,8 +82,11 @@ typedef union {
 struct WASMMemoryInstance {
     /* Module type */
     uint32 module_type;
+
+    bool is_shared_memory;
+
     /* Shared memory flag */
-    bh_atomic_32_t ref_count; /* 0: non-shared, > 0: reference count */
+    bh_atomic_16_t ref_count; /* 0: non-shared, > 0: reference count */
 
     /* Number bytes per page */
     uint32 num_bytes_per_page;
@@ -180,6 +186,30 @@ struct WASMFunctionInstance {
 #endif
 };
 
+#if WASM_ENABLE_TAGS != 0
+struct WASMTagInstance {
+    bool is_import_tag;
+    /* tag attribute */
+    uint8 attribute;
+    /* tag type index */
+    uint32 type;
+    union {
+        WASMTagImport *tag_import;
+        WASMTag *tag;
+    } u;
+
+#if WASM_ENABLE_MULTI_MODULE != 0
+    WASMModuleInstance *import_module_inst;
+    WASMTagInstance *import_tag_inst;
+#endif
+};
+#endif
+
+#if WASM_ENABLE_EXCE_HANDLING != 0
+#define INVALID_TAGINDEX ((uint32)0xFFFFFFFF)
+#define SET_INVALID_TAGINDEX(tag) (tag = INVALID_TAGINDEX)
+#define IS_INVALID_TAGINDEX(tag) ((tag & INVALID_TAGINDEX) == INVALID_TAGINDEX)
+#endif
 typedef struct WASMExportFuncInstance {
     char *name;
     WASMFunctionInstance *function;
@@ -199,6 +229,13 @@ typedef struct WASMExportMemInstance {
     char *name;
     WASMMemoryInstance *memory;
 } WASMExportMemInstance;
+
+#if WASM_ENABLE_TAGS != 0
+typedef struct WASMExportTagInstance {
+    char *name;
+    WASMTagInstance *tag;
+} WASMExportTagInstance;
+#endif
 
 /* wasm-c-api import function info */
 typedef struct CApiFuncImport {
@@ -244,6 +281,14 @@ typedef struct WASMModuleInstanceExtra {
     bh_list *sub_module_inst_list;
     /* linked table instances of import table instances */
     WASMTableInstance **table_insts_linked;
+#endif
+
+#if WASM_ENABLE_TAGS != 0
+    uint32 tag_count;
+    uint32 export_tag_count;
+    WASMTagInstance *tags;
+    WASMExportTagInstance *export_tags;
+    void **import_tag_ptrs;
 #endif
 
 #if WASM_ENABLE_MEMORY_PROFILING != 0
@@ -437,6 +482,13 @@ wasm_lookup_memory(const WASMModuleInstance *module_inst, const char *name);
 
 WASMTableInstance *
 wasm_lookup_table(const WASMModuleInstance *module_inst, const char *name);
+
+#if WASM_ENABLE_TAGS != 0
+WASMTagInstance *
+wasm_lookup_tag(const WASMModuleInstance *module_inst, const char *name,
+                const char *signature);
+#endif
+
 #endif
 
 bool

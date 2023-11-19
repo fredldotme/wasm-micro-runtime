@@ -1031,7 +1031,8 @@ wasm_interp_call_func_import(WASMModuleInstance *module_inst,
     }
 
     /* - module_inst */
-    exec_env->module_inst = (WASMModuleInstanceCommon *)sub_module_inst;
+    wasm_exec_env_set_module_inst(exec_env,
+                                  (WASMModuleInstanceCommon *)sub_module_inst);
     /* - aux_stack_boundary */
     aux_stack_origin_boundary = exec_env->aux_stack_boundary.boundary;
     exec_env->aux_stack_boundary.boundary =
@@ -1053,15 +1054,8 @@ wasm_interp_call_func_import(WASMModuleInstance *module_inst,
     prev_frame->ip = ip;
     exec_env->aux_stack_boundary.boundary = aux_stack_origin_boundary;
     exec_env->aux_stack_bottom.bottom = aux_stack_origin_bottom;
-    exec_env->module_inst = (WASMModuleInstanceCommon *)module_inst;
-
-    /* transfer exception if it is thrown */
-    if (wasm_copy_exception(sub_module_inst, NULL)) {
-        bh_memcpy_s(module_inst->cur_exception,
-                    sizeof(module_inst->cur_exception),
-                    sub_module_inst->cur_exception,
-                    sizeof(sub_module_inst->cur_exception));
-    }
+    wasm_exec_env_restore_module_inst(exec_env,
+                                      (WASMModuleInstanceCommon *)module_inst);
 }
 #endif
 
@@ -1128,12 +1122,27 @@ wasm_interp_dump_op_count()
         goto *p_label_addr;                            \
     } while (0)
 #else
-#define FETCH_OPCODE_AND_DISPATCH()                                 \
-    do {                                                            \
-        const void *p_label_addr = label_base + *(int16 *)frame_ip; \
-        frame_ip += sizeof(int16);                                  \
-        goto *p_label_addr;                                         \
+#if UINTPTR_MAX == UINT64_MAX
+#define FETCH_OPCODE_AND_DISPATCH()                                       \
+    do {                                                                  \
+        const void *p_label_addr;                                         \
+        bh_assert(((uintptr_t)frame_ip & 1) == 0);                        \
+        /* int32 relative offset was emitted in 64-bit target */          \
+        p_label_addr = label_base + (int32)LOAD_U32_WITH_2U16S(frame_ip); \
+        frame_ip += sizeof(int32);                                        \
+        goto *p_label_addr;                                               \
     } while (0)
+#else
+#define FETCH_OPCODE_AND_DISPATCH()                                      \
+    do {                                                                 \
+        const void *p_label_addr;                                        \
+        bh_assert(((uintptr_t)frame_ip & 1) == 0);                       \
+        /* uint32 label address was emitted in 32-bit target */          \
+        p_label_addr = (void *)(uintptr_t)LOAD_U32_WITH_2U16S(frame_ip); \
+        frame_ip += sizeof(int32);                                       \
+        goto *p_label_addr;                                              \
+    } while (0)
+#endif
 #endif /* end of WASM_CPU_SUPPORTS_UNALIGNED_ADDR_ACCESS */
 #define HANDLE_OP_END() FETCH_OPCODE_AND_DISPATCH()
 
@@ -1183,7 +1192,7 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
     register uint8 *frame_ip = &opcode_IMPDEP; /* cache of frame->ip */
     register uint32 *frame_lp = NULL;          /* cache of frame->lp */
 #if WASM_ENABLE_LABELS_AS_VALUES != 0
-#if WASM_CPU_SUPPORTS_UNALIGNED_ADDR_ACCESS == 0
+#if WASM_CPU_SUPPORTS_UNALIGNED_ADDR_ACCESS == 0 && UINTPTR_MAX == UINT64_MAX
     /* cache of label base addr */
     register uint8 *label_base = &&HANDLE_WASM_OP_UNREACHABLE;
 #endif

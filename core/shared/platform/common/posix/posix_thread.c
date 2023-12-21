@@ -9,6 +9,10 @@
 #include "platform_api_vmcore.h"
 #include "platform_api_extension.h"
 
+#if __APPLE__
+#include <TargetConditionals.h>
+#endif
+
 typedef struct {
     thread_start_routine_t start;
     void *arg;
@@ -476,7 +480,7 @@ os_thread_get_stack_boundary()
 void
 os_thread_jit_write_protect_np(bool enabled)
 {
-#if (defined(__APPLE__) || defined(__MACH__)) && defined(__arm64__)
+#if (defined(__APPLE__) || defined(__MACH__)) && defined(__arm64__) && !TARGET_OS_IPHONE
     pthread_jit_write_protect_np(enabled);
 #endif
 }

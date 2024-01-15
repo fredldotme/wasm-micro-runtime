@@ -67,6 +67,7 @@ os_thread_create_with_prio(korp_tid *tid, thread_start_routine_t start,
 
     pthread_attr_init(&tattr);
     pthread_attr_setdetachstate(&tattr, PTHREAD_CREATE_JOINABLE);
+#if 0
     if (pthread_attr_setstacksize(&tattr, stack_size) != 0) {
         os_printf("Invalid thread stack size %u. "
                   "Min stack size on Linux = %u\n",
@@ -74,6 +75,7 @@ os_thread_create_with_prio(korp_tid *tid, thread_start_routine_t start,
         pthread_attr_destroy(&tattr);
         return BHT_ERROR;
     }
+#endif
 
     targ = (thread_wrapper_arg *)BH_MALLOC(sizeof(*targ));
     if (!targ) {

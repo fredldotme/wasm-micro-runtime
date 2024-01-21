@@ -31,7 +31,7 @@ bh_log(LogLevel log_level, const char *file, int line, const char *fmt, ...)
 
     self = os_self_thread();
 
-    usec = os_time_get_boot_microsecond();
+    usec = os_time_get_boot_us();
     t = (uint32)(usec / 1000000) % (24 * 60 * 60);
     h = t / (60 * 60);
     t = t % (60 * 60);
@@ -43,7 +43,9 @@ bh_log(LogLevel log_level, const char *file, int line, const char *fmt, ...)
              "%02" PRIu32 ":%02" PRIu32 ":%02" PRIu32 ":%03" PRIu32, h, m, s,
              mills);
 
+#ifndef BH_VPRINTF
     os_printf("[%s - %" PRIXPTR "]: ", buf, (uintptr_t)self);
+#endif
 
     if (file)
         os_printf("%s, line %d, ", file, line);

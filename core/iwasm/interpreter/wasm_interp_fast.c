@@ -884,7 +884,7 @@ ALLOC_FRAME(WASMExecEnv *exec_env, uint32 size, WASMInterpFrame *prev_frame)
     if (frame) {
         frame->prev_frame = prev_frame;
 #if WASM_ENABLE_PERF_PROFILING != 0
-        frame->time_started = os_time_get_boot_microsecond();
+        frame->time_started = os_time_thread_cputime_us();
 #endif
     }
     else {
@@ -900,9 +900,15 @@ FREE_FRAME(WASMExecEnv *exec_env, WASMInterpFrame *frame)
 {
 #if WASM_ENABLE_PERF_PROFILING != 0
     if (frame->function) {
+        WASMInterpFrame *prev_frame = frame->prev_frame;
+
         frame->function->total_exec_time +=
-            os_time_get_boot_microsecond() - frame->time_started;
+            os_time_thread_cputime_us() - frame->time_started;
         frame->function->total_exec_cnt++;
+
+        if (prev_frame && prev_frame->function)
+            prev_frame->function->children_exec_time +=
+                frame->function->total_exec_time;
     }
 #endif
     wasm_exec_env_free_wasm_frame(exec_env, frame);
@@ -1931,11 +1937,7 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
 #if !defined(OS_ENABLE_HW_BOUND_CHECK)              \
     || WASM_CPU_SUPPORTS_UNALIGNED_ADDR_ACCESS == 0 \
     || WASM_ENABLE_BULK_MEMORY != 0
-#if WASM_ENABLE_THREAD_MGR == 0
-                    linear_mem_size = memory->memory_data_size;
-#else
                     linear_mem_size = GET_LINEAR_MEMORY_SIZE(memory);
-#endif
 #endif
                 }
 

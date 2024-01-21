@@ -305,7 +305,7 @@ static unsigned char dummy_wasm_file[8] = { 0x00, 0x61, 0x73, 0x6D,
                                             0x01, 0x00, 0x00, 0x00 };
 
 int
-wamr_compiler_main(int argc, char *argv[])
+main(int argc, char *argv[])
 {
     char *wasm_file_name = NULL, *out_file_name = NULL;
     uint8 *wasm_file = NULL;

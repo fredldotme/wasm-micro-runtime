@@ -1061,7 +1061,7 @@ export_tags_instantiate(const WASMModule *module,
         if (export->kind == EXPORT_KIND_TAG) {
             export_tag->name = export->name;
 
-            bh_assert((uint32)(module_inst->export_tags));
+            bh_assert(module_inst->e->tags);
 
             export_tag->tag = &module_inst->e->tags[export->index];
             export_tag++;
@@ -1811,6 +1811,10 @@ wasm_instantiate(WASMModule *module, WASMModuleInstance *parent,
                           "failed to allocate bitmaps");
             goto fail;
         }
+        for (i = 0; i < module->data_seg_count; i++) {
+            if (!module->data_segments[i]->is_passive)
+                bh_bitmap_set_bit(module_inst->e->common.data_dropped, i);
+        }
     }
 #endif
 #if WASM_ENABLE_REF_TYPES != 0
@@ -1822,6 +1826,10 @@ wasm_instantiate(WASMModule *module, WASMModuleInstance *parent,
             set_error_buf(error_buf, error_buf_size,
                           "failed to allocate bitmaps");
             goto fail;
+        }
+        for (i = 0; i < module->table_seg_count; i++) {
+            if (wasm_elem_is_active(module->table_segments[i].mode))
+                bh_bitmap_set_bit(module_inst->e->common.elem_dropped, i);
         }
     }
 #endif
@@ -3457,6 +3465,7 @@ llvm_jit_table_init(WASMModuleInstance *module_inst, uint32 tbl_idx,
 {
     WASMTableInstance *tbl_inst;
     WASMTableSeg *tbl_seg;
+    uint32 *tbl_seg_elems = NULL, tbl_seg_len = 0;
 
     bh_assert(module_inst->module_type == Wasm_Module_Bytecode);
 
@@ -3466,7 +3475,13 @@ llvm_jit_table_init(WASMModuleInstance *module_inst, uint32 tbl_idx,
     bh_assert(tbl_inst);
     bh_assert(tbl_seg);
 
-    if (offset_len_out_of_bounds(src_offset, length, tbl_seg->function_count)
+    if (!bh_bitmap_get_bit(module_inst->e->common.elem_dropped, tbl_seg_idx)) {
+        /* table segment isn't dropped */
+        tbl_seg_elems = tbl_seg->func_indexes;
+        tbl_seg_len = tbl_seg->function_count;
+    }
+
+    if (offset_len_out_of_bounds(src_offset, length, tbl_seg_len)
         || offset_len_out_of_bounds(dst_offset, length, tbl_inst->cur_size)) {
         jit_set_exception_with_id(module_inst, EXCE_OUT_OF_BOUNDS_TABLE_ACCESS);
         return;
@@ -3476,21 +3491,10 @@ llvm_jit_table_init(WASMModuleInstance *module_inst, uint32 tbl_idx,
         return;
     }
 
-    if (bh_bitmap_get_bit(module_inst->e->common.elem_dropped, tbl_seg_idx)) {
-        jit_set_exception_with_id(module_inst, EXCE_OUT_OF_BOUNDS_TABLE_ACCESS);
-        return;
-    }
-
-    if (!wasm_elem_is_passive(tbl_seg->mode)) {
-        jit_set_exception_with_id(module_inst, EXCE_OUT_OF_BOUNDS_TABLE_ACCESS);
-        return;
-    }
-
     bh_memcpy_s((uint8 *)tbl_inst + offsetof(WASMTableInstance, elems)
                     + dst_offset * sizeof(uint32),
                 (uint32)sizeof(uint32) * (tbl_inst->cur_size - dst_offset),
-                tbl_seg->func_indexes + src_offset,
-                (uint32)(length * sizeof(uint32)));
+                tbl_seg_elems + src_offset, (uint32)(length * sizeof(uint32)));
 }
 
 void
@@ -3630,14 +3634,13 @@ llvm_jit_free_frame(WASMExecEnv *exec_env)
 
 #if WASM_ENABLE_PERF_PROFILING != 0
     if (frame->function) {
-        frame->function->total_exec_time +=
-            os_time_thread_cputime_us() - frame->time_started;
+        uint64 elapsed = os_time_thread_cputime_us() - frame->time_started;
+        frame->function->total_exec_time += elapsed;
         frame->function->total_exec_cnt++;
 
         /* parent function */
         if (prev_frame)
-            prev_frame->function->children_exec_time =
-                frame->function->total_exec_time;
+            prev_frame->function->children_exec_time += elapsed;
     }
 #endif
     wasm_exec_env_free_wasm_frame(exec_env, frame);

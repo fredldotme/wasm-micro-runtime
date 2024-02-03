@@ -785,6 +785,7 @@ align_ptr(const uint8 *p, uint32 b)
             return false;                                    \
     } while (0)
 
+/* NOLINTNEXTLINE */
 #define read_uint16(p, p_end, res)                 \
     do {                                           \
         p = (uint8 *)align_ptr(p, sizeof(uint16)); \
@@ -793,6 +794,7 @@ align_ptr(const uint8 *p, uint32 b)
         p += sizeof(uint16);                       \
     } while (0)
 
+/* NOLINTNEXTLINE */
 #define read_uint32(p, p_end, res)                 \
     do {                                           \
         p = (uint8 *)align_ptr(p, sizeof(uint32)); \
@@ -2911,7 +2913,8 @@ copy_string_array(const char *array[], uint32 array_size, char **buf_ptr,
     /* We add +1 to generate null-terminated array of strings */
     total_size = sizeof(char *) * ((uint64)array_size + 1);
     if (total_size >= UINT32_MAX
-        || (total_size > 0 && !(list = wasm_runtime_malloc((uint32)total_size)))
+        /* total_size must be larger than 0, don' check it again */
+        || !(list = wasm_runtime_malloc((uint32)total_size))
         || buf_size >= UINT32_MAX
         || (buf_size > 0 && !(buf = wasm_runtime_malloc((uint32)buf_size)))) {
 
@@ -3542,7 +3545,7 @@ static union {
     char b;
 } __ue = { .a = 1 };
 
-#define is_little_endian() (__ue.b == 1)
+#define is_little_endian() (__ue.b == 1) /* NOLINT */
 
 bool
 wasm_runtime_register_natives(const char *module_name,
@@ -4451,6 +4454,7 @@ typedef int64 (*Int64FuncPtr)(GenericFunctionPointer, uint64 *, uint64);
 typedef int32 (*Int32FuncPtr)(GenericFunctionPointer, uint64 *, uint64);
 typedef void (*VoidFuncPtr)(GenericFunctionPointer, uint64 *, uint64);
 
+/* NOLINTBEGIN */
 static volatile Float64FuncPtr invokeNative_Float64 =
     (Float64FuncPtr)(uintptr_t)invokeNative;
 static volatile Float32FuncPtr invokeNative_Float32 =
@@ -4466,6 +4470,7 @@ static volatile VoidFuncPtr invokeNative_Void =
 typedef v128 (*V128FuncPtr)(GenericFunctionPointer, uint64 *, uint64);
 static V128FuncPtr invokeNative_V128 = (V128FuncPtr)(uintptr_t)invokeNative;
 #endif
+/* NOLINTEND */
 
 #if defined(_WIN32) || defined(_WIN32_)
 #define MAX_REG_FLOATS 4

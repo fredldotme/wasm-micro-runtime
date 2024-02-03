@@ -888,13 +888,12 @@ FREE_FRAME(WASMExecEnv *exec_env, WASMInterpFrame *frame)
 #if WASM_ENABLE_PERF_PROFILING != 0
     if (frame->function) {
         WASMInterpFrame *prev_frame = frame->prev_frame;
-        frame->function->total_exec_time +=
-            os_time_thread_cputime_us() - frame->time_started;
+        uint64 elapsed = os_time_thread_cputime_us() - frame->time_started;
+        frame->function->total_exec_time += elapsed;
         frame->function->total_exec_cnt++;
 
         if (prev_frame && prev_frame->function)
-            prev_frame->function->children_exec_time +=
-                frame->function->total_exec_time;
+            prev_frame->function->children_exec_time += elapsed;
     }
 #endif
     wasm_exec_env_free_wasm_frame(exec_env, frame);
@@ -1388,18 +1387,23 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
                                             /* push exception_tag_index and
                                              * exception values for rethrow */
                                             PUSH_I32(exception_tag_index);
-                                            word_copy(frame_sp,
-                                                      frame_sp_old
-                                                          - cell_num_to_copy,
-                                                      cell_num_to_copy);
-                                            frame_sp += cell_num_to_copy;
-                                            /* push exception values for catch
-                                             */
-                                            word_copy(frame_sp,
-                                                      frame_sp_old
-                                                          - cell_num_to_copy,
-                                                      cell_num_to_copy);
-                                            frame_sp += cell_num_to_copy;
+                                            if (cell_num_to_copy > 0) {
+                                                word_copy(
+                                                    frame_sp,
+                                                    frame_sp_old
+                                                        - cell_num_to_copy,
+                                                    cell_num_to_copy);
+                                                frame_sp += cell_num_to_copy;
+                                                /* push exception values for
+                                                 * catch
+                                                 */
+                                                word_copy(
+                                                    frame_sp,
+                                                    frame_sp_old
+                                                        - cell_num_to_copy,
+                                                    cell_num_to_copy);
+                                                frame_sp += cell_num_to_copy;
+                                            }
 
                                             /* advance to handler */
                                             HANDLE_OP_END();
@@ -1428,11 +1432,13 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
                                         frame_csp -= lookup_depth;
 
                                         /* push exception values for catch */
-                                        word_copy(frame_sp,
-                                                  frame_sp_old
-                                                      - cell_num_to_copy,
-                                                  cell_num_to_copy);
-                                        frame_sp += cell_num_to_copy;
+                                        if (cell_num_to_copy > 0) {
+                                            word_copy(frame_sp,
+                                                      frame_sp_old
+                                                          - cell_num_to_copy,
+                                                      cell_num_to_copy);
+                                            frame_sp += cell_num_to_copy;
+                                        }
 
                                         /* tag_index is already stored in
                                          * exception_tag_index */
@@ -1453,11 +1459,13 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
                                         /* push exception_tag_index and
                                          * exception values for rethrow */
                                         PUSH_I32(exception_tag_index);
-                                        word_copy(frame_sp,
-                                                  frame_sp_old
-                                                      - cell_num_to_copy,
-                                                  cell_num_to_copy);
-                                        frame_sp += cell_num_to_copy;
+                                        if (cell_num_to_copy > 0) {
+                                            word_copy(frame_sp,
+                                                      frame_sp_old
+                                                          - cell_num_to_copy,
+                                                      cell_num_to_copy);
+                                            frame_sp += cell_num_to_copy;
+                                        }
                                         /* catch_all has no exception values */
 
                                         /* advance to handler */
@@ -1484,10 +1492,12 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
                              * The values are copied to the CALLER FRAME
                              * (prev_frame->sp) same behvior ad WASM_OP_RETURN
                              */
-                            word_copy(prev_frame->sp,
-                                      frame_sp_old - cell_num_to_copy,
-                                      cell_num_to_copy);
-                            prev_frame->sp += cell_num_to_copy;
+                            if (cell_num_to_copy > 0) {
+                                word_copy(prev_frame->sp,
+                                          frame_sp_old - cell_num_to_copy,
+                                          cell_num_to_copy);
+                                prev_frame->sp += cell_num_to_copy;
+                            }
                             *((int32 *)(prev_frame->sp)) = exception_tag_index;
                             prev_frame->sp++;
 
@@ -3501,6 +3511,8 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
                 uint32 opcode1;
 
                 read_leb_uint32(frame_ip, frame_ip_end, opcode1);
+                /* opcode1 was checked in loader and is no larger than
+                   UINT8_MAX */
                 opcode = (uint8)opcode1;
 
                 switch (opcode) {
@@ -3659,6 +3671,7 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
                         uint32 tbl_idx, elem_idx;
                         uint32 n, s, d;
                         WASMTableInstance *tbl_inst;
+                        uint32 *tbl_seg_elems = NULL, tbl_seg_len = 0;
 
                         read_leb_uint32(frame_ip, frame_ip_end, elem_idx);
                         bh_assert(elem_idx < module->module->table_seg_count);
@@ -3672,10 +3685,18 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
                         s = (uint32)POP_I32();
                         d = (uint32)POP_I32();
 
-                        if (offset_len_out_of_bounds(
-                                s, n,
+                        if (!bh_bitmap_get_bit(module->e->common.elem_dropped,
+                                               elem_idx)) {
+                            /* table segment isn't dropped */
+                            tbl_seg_elems =
                                 module->module->table_segments[elem_idx]
-                                    .function_count)
+                                    .func_indexes;
+                            tbl_seg_len =
+                                module->module->table_segments[elem_idx]
+                                    .function_count;
+                        }
+
+                        if (offset_len_out_of_bounds(s, n, tbl_seg_len)
                             || offset_len_out_of_bounds(d, n,
                                                         tbl_inst->cur_size)) {
                             wasm_set_exception(module,
@@ -3687,30 +3708,12 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
                             break;
                         }
 
-                        if (bh_bitmap_get_bit(module->e->common.elem_dropped,
-                                              elem_idx)) {
-                            wasm_set_exception(module,
-                                               "out of bounds table access");
-                            goto got_exception;
-                        }
-
-                        if (!wasm_elem_is_passive(
-                                module->module->table_segments[elem_idx]
-                                    .mode)) {
-                            wasm_set_exception(module,
-                                               "out of bounds table access");
-                            goto got_exception;
-                        }
-
                         bh_memcpy_s(
                             (uint8 *)tbl_inst
                                 + offsetof(WASMTableInstance, elems)
                                 + d * sizeof(uint32),
                             (uint32)((tbl_inst->cur_size - d) * sizeof(uint32)),
-                            module->module->table_segments[elem_idx]
-                                    .func_indexes
-                                + s,
-                            (uint32)(n * sizeof(uint32)));
+                            tbl_seg_elems + s, (uint32)(n * sizeof(uint32)));
 
                         break;
                     }
@@ -3842,8 +3845,12 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
             HANDLE_OP(WASM_OP_ATOMIC_PREFIX)
             {
                 uint32 offset = 0, align, addr;
+                uint32 opcode1;
 
-                opcode = *frame_ip++;
+                read_leb_uint32(frame_ip, frame_ip_end, opcode1);
+                /* opcode1 was checked in loader and is no larger than
+                   UINT8_MAX */
+                opcode = (uint8)opcode1;
 
                 if (opcode != WASM_OP_ATOMIC_FENCE) {
                     read_leb_uint32(frame_ip, frame_ip_end, align);

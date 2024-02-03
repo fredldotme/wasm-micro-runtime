@@ -7,6 +7,7 @@
 
 #if defined(__APPLE__) || defined(__MACH__)
 #include <libkern/OSCacheControl.h>
+#include <TargetConditionals.h>
 #endif
 
 #ifndef BH_ENABLE_TRACE_MMAP
@@ -266,5 +267,8 @@ os_icache_flush(void *start, size_t len)
 {
 #if defined(__APPLE__) || defined(__MACH__)
     sys_icache_invalidate(start, len);
+#else
+    (void)start;
+    (void)len;
 #endif
 }

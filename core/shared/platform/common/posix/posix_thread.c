@@ -9,7 +9,7 @@
 #include "platform_api_vmcore.h"
 #include "platform_api_extension.h"
 
-#if __APPLE__
+#if defined(__APPLE__) || defined(__MACH__)
 #include <TargetConditionals.h>
 #endif
 

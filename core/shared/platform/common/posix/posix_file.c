@@ -384,7 +384,7 @@ os_openat(os_file_handle handle, const char *path, __wasi_oflags_t oflags,
         // Linux returns ENXIO instead of EOPNOTSUPP when opening a socket.
         if (openat_errno == ENXIO) {
             struct stat sb;
-            int ret = fstatat(fd, path, &sb,
+            int ret = fstatat(handle, path, &sb,
                               (lookup_flags & __WASI_LOOKUP_SYMLINK_FOLLOW)
                                   ? 0
                                   : AT_SYMLINK_NOFOLLOW);
@@ -396,7 +396,7 @@ os_openat(os_file_handle handle, const char *path, __wasi_oflags_t oflags,
         if (openat_errno == ENOTDIR
             && (open_flags & (O_NOFOLLOW | O_DIRECTORY)) != 0) {
             struct stat sb;
-            int ret = fstatat(fd, path, &sb, AT_SYMLINK_NOFOLLOW);
+            int ret = fstatat(handle, path, &sb, AT_SYMLINK_NOFOLLOW);
             if (S_ISLNK(sb.st_mode)) {
                 return __WASI_ELOOP;
             }
@@ -823,7 +823,7 @@ os_fadvise(os_file_handle handle, __wasi_filesize_t offset,
 
     int ret = posix_fadvise(handle, (off_t)offset, (off_t)length, nadvice);
 
-    if (ret < 0)
+    if (ret != 0)
         return convert_errno(ret);
 
     return __WASI_ESUCCESS;
@@ -920,7 +920,12 @@ os_readdir(os_dir_stream dir_stream, __wasi_dirent_t *entry,
 
     if (dent == NULL) {
         *d_name = NULL;
-        return convert_errno(errno);
+        if (errno != 0) {
+            return convert_errno(errno);
+        }
+        else {
+            return 0;
+        }
     }
 
     long offset = (__wasi_dircookie_t)telldir(dir_stream);

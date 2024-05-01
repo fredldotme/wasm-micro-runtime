@@ -81,7 +81,17 @@ compare_type_with_signautre(uint8 type, const char signature)
     }
 
 #if WASM_ENABLE_REF_TYPES != 0
-    if ('r' == signature && type == VALUE_TYPE_EXTERNREF)
+    if ('r' == signature
+#if WASM_ENABLE_GC != 0
+#if WASM_ENABLE_STRINGREF != 0
+        && (type >= REF_TYPE_STRINGVIEWITER && type <= REF_TYPE_NULLFUNCREF)
+#else
+        && (type >= REF_TYPE_HT_NULLABLE && type <= REF_TYPE_NULLFUNCREF)
+#endif
+#else
+        && type == VALUE_TYPE_EXTERNREF
+#endif
+    )
         return true;
 #endif
 
@@ -90,7 +100,7 @@ compare_type_with_signautre(uint8 type, const char signature)
 }
 
 static bool
-check_symbol_signature(const WASMType *type, const char *signature)
+check_symbol_signature(const WASMFuncType *type, const char *signature)
 {
     const char *p = signature, *p_end;
     char sig;
@@ -189,8 +199,9 @@ lookup_symbol(NativeSymbol *native_symbols, uint32 n_native_symbols,
  */
 void *
 wasm_native_resolve_symbol(const char *module_name, const char *field_name,
-                           const WASMType *func_type, const char **p_signature,
-                           void **p_attachment, bool *p_call_conv_raw)
+                           const WASMFuncType *func_type,
+                           const char **p_signature, void **p_attachment,
+                           bool *p_call_conv_raw)
 {
     NativeSymbolsNode *node, *node_next;
     const char *signature = NULL;
@@ -556,7 +567,12 @@ wasm_native_init()
 
 #if WASM_ENABLE_WASI_NN != 0
     n_native_symbols = get_wasi_nn_export_apis(&native_symbols);
-    if (!wasm_native_register_natives("wasi_nn", native_symbols,
+#if WASM_ENABLE_WASI_EPHEMERAL_NN != 0
+#define wasi_nn_module_name "wasi_ephemeral_nn"
+#else /* WASM_ENABLE_WASI_EPHEMERAL_NN == 0 */
+#define wasi_nn_module_name "wasi_nn"
+#endif /* WASM_ENABLE_WASI_EPHEMERAL_NN != 0 */
+    if (!wasm_native_register_natives(wasi_nn_module_name, native_symbols,
                                       n_native_symbols))
         goto fail;
 #endif
@@ -1442,7 +1458,7 @@ quick_aot_entry_init()
 }
 
 void *
-wasm_native_lookup_quick_aot_entry(const WASMType *func_type)
+wasm_native_lookup_quick_aot_entry(const WASMFuncType *func_type)
 {
     char signature[16] = { 0 };
     uint32 param_count = func_type->param_count;

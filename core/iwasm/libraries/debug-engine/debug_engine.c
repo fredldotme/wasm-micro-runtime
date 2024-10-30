@@ -1465,7 +1465,8 @@ wasm_debug_engine_wait_for_continue(WASMExecEnv* exec_env)
 {
     WASMCluster *cluster = wasm_exec_env_get_cluster(exec_env);
     while (cluster->debug_inst == NULL ||
-           !is_thread_running(cluster->debug_inst->control_thread)) {
+           !is_thread_running(cluster->debug_inst->control_thread) ||
+           cluster->debug_inst->control_thread->server->socket_fd < 0) {
         usleep(1000 * 100);
     }
 }

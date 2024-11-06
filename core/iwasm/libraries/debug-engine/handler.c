@@ -287,7 +287,11 @@ handle_general_query(WASMGDBServer *server, char *payload)
     }
 
     if (args && (!strcmp(name, "MemoryRegionInfo"))) {
+#if __APPLE__
         uint64 addr = strtoul(args, NULL, 16);
+#else
+        uint64 addr = strtoll(args, NULL, 16);
+#endif
         WASMDebugMemoryInfo *mem_info = wasm_debug_instance_get_memregion(
             (WASMDebugInstance *)server->thread->debug_instance, addr);
         if (mem_info) {
@@ -593,19 +597,26 @@ void
 handle_get_read_memory(WASMGDBServer *server, char *payload)
 {
     uint64 maddr, mlen;
-    char* maddr_str;
-    char* mlen_str;
     bool ret;
 
-    char* copy = strdup(payload);
-    maddr_str = strtok(copy, ",");
-    mlen_str = strtok(NULL, ",");
-    maddr = strtoul(maddr_str, NULL, 16);
-    mlen = strtoul(mlen_str, NULL, 16);
-    free(copy);
+#if __APPLE__
+    char* maddr_str;
+    char* mlen_str;
+
+    {
+        char* copy = strdup(payload);
+        maddr_str = strtok(copy, ",");
+        mlen_str = strtok(NULL, ",");
+        maddr = strtoul(maddr_str, NULL, 16);
+        mlen = strtoul(mlen_str, NULL, 16);
+        free(copy);
+        ret = true;
+    }
+#endif
 
     os_mutex_lock(&tmpbuf_lock);
-    if (true) {
+    snprintf(tmpbuf, MAX_PACKET_SIZE, "%s", "");
+    if (sscanf(payload, "%" SCNx64 ",%" SCNx64, &maddr, &mlen) == 2) {
         char *buff;
 
         if (mlen * 2 > MAX_PACKET_SIZE) {
@@ -719,15 +730,29 @@ handle_add_break(WASMGDBServer *server, char *payload)
 {
     size_t type, length;
     uint64 addr;
+#if !__APPLE__
+    int arg_c;
+#endif
 
-    char* buf = strdup(payload);
-    char* type_str = strtok(buf, ",");
-    char* addr_str = strtok(NULL, ",");
-    char* length_str = strtok(NULL, ",");
-    type = strtol(type_str, NULL, 16);
-    addr = strtoull(addr_str, NULL, 16);
-    length = strtol(length_str, NULL, 16);
-    free(buf);
+    {
+        char* buf = strdup(payload);
+        char* type_str = strtok(buf, ",");
+        char* addr_str = strtok(NULL, ",");
+        char* length_str = strtok(NULL, ",");
+        type = strtol(type_str, NULL, 16);
+        addr = strtoull(addr_str, NULL, 16);
+        length = strtol(length_str, NULL, 16);
+        free(buf);
+    }
+
+#if !__APPLE
+    if ((arg_c = sscanf(payload, "%zx,%lx,%zx", &type, &addr, &length))
+        != 3) {
+        LOG_ERROR("Unsupported number of add break arguments %d", arg_c);
+        write_packet(server, "");
+        return;
+    }
+#endif
 
     switch (type) {
         case eBreakpointSoftware:
